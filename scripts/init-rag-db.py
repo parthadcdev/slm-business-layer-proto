@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-RAG Database Initialization Script
-Initializes ChromaDB with business requirements documents and sets up the vector store.
+SLM Business Service Layer - RAG Database Initialization Script
+
+@author: Partha Chandramohan
+@description: Initializes ChromaDB with business requirements documents and sets up the vector store for semantic search
 """
 
 import os

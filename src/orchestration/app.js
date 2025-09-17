@@ -1,4 +1,9 @@
-// Main orchestration service
+/**
+ * SLM Business Service Layer - Main Orchestration Service
+ *
+ * @author Partha Chandramohan
+ * @description Express.js server that handles HTTP requests, authentication, and routes requests to appropriate services
+ */
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

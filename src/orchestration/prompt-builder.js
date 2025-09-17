@@ -1,4 +1,9 @@
-// SLM prompt construction
+/**
+ * SLM Business Service Layer - Prompt Builder
+ *
+ * @author Partha Chandramohan
+ * @description Dynamic prompt construction for SLM inference with context-aware document retrieval
+ */
 const ragService = require('../rag/vector-store');
 
 class PromptBuilder {

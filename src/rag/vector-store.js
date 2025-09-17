@@ -1,4 +1,9 @@
-// Vector storage and retrieval operations
+/**
+ * SLM Business Service Layer - Vector Store
+ *
+ * @author Partha Chandramohan
+ * @description High-level interface for vector database operations and semantic search with ChromaDB
+ */
 const chromaClient = require('./chromadb-client');
 const embeddingService = require('./embedding-service');
 const chunkProcessor = require('./chunk-processor');

@@ -1,4 +1,9 @@
-// ChromaDB client for local vector storage
+/**
+ * SLM Business Service Layer - ChromaDB Client
+ *
+ * @author Partha Chandramohan
+ * @description ChromaDB client for local vector storage and semantic search operations
+ */
 const { ChromaApi, OpenAIEmbeddingFunction, Configuration } = require('chromadb');
 
 class ChromaDBClient {

@@ -2,6 +2,9 @@
 
 # SLM-Powered Business Service Layer Project
 
+**Author:** Partha Chandramohan
+**Description:** Small Language Model powered business service layer replacing traditional custom-coded business logic
+
 ## Project Overview
 This project implements a revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system. The architecture leverages Retrieval-Augmented Generation (RAG) with business requirement documents (BRDs) to eliminate manual coding of business logic.
 

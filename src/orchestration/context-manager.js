@@ -1,4 +1,9 @@
-// User context and session management
+/**
+ * SLM Business Service Layer - Context Manager
+ *
+ * @author Partha Chandramohan
+ * @description User context and session management for enriching requests with user profile, permissions, and system state
+ */
 const redis = require('redis');
 
 class ContextManager {

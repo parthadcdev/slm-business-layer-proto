@@ -1,4 +1,9 @@
-// Action execution engine
+/**
+ * SLM Business Service Layer - Action Executor
+ *
+ * @author Partha Chandramohan
+ * @description Action execution engine for processing business logic derived from SLM responses
+ */
 const apiFunctions = require('./api-functions');
 const dbFunctions = require('./db-functions');
 const permissions = require('./permissions');

@@ -1,4 +1,9 @@
-// Role-based access control system
+/**
+ * SLM Business Service Layer - RBAC Security
+ *
+ * @author Partha Chandramohan
+ * @description Role-based access control system with permissions management and audit trail
+ */
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 

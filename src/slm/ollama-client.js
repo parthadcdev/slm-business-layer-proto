@@ -1,4 +1,9 @@
-// Ollama API client and connection management
+/**
+ * SLM Business Service Layer - Ollama Client
+ *
+ * @author Partha Chandramohan
+ * @description Ollama API client for SLM inference, model management, and connection pooling
+ */
 const axios = require('axios');
 
 class OllamaClient {

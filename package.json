@@ -2,6 +2,7 @@
   "name": "slm-business-layer",
   "version": "1.0.0",
   "description": "SLM-Powered Business Service Layer - A revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system.",
+  "author": "Partha Chandramohan",
   "main": "src/orchestration/app.js",
   "type": "commonjs",
   "scripts": {

@@ -1,5 +1,7 @@
 # SLM-Powered Business Service Layer
 
+**Author:** Partha Chandramohan
+
 A revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system. This prototype leverages Retrieval-Augmented Generation (RAG) with business requirement documents (BRDs) to eliminate manual coding of business logic.
 
 ## 🚀 Architecture Overview
