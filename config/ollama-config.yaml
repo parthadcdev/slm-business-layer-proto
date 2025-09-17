@@ -1,0 +1,290 @@
+# Ollama Configuration for SLM Business Service Layer
+
+# Server Configuration
+server:
+  host: "localhost"
+  port: 11434
+  base_url: "http://localhost:11434"
+  timeout: 30000  # 30 seconds
+  max_retries: 3
+  retry_delay: 1000  # 1 second
+
+# Model Configuration
+models:
+  default: "llama3.2:3b"
+
+  # Available models with their configurations
+  llama3.2:3b:
+    name: "llama3.2:3b"
+    description: "Llama 3.2 3B - Fast general purpose model"
+    max_tokens: 2048
+    context_window: 8192
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 40
+    repeat_penalty: 1.1
+    specialty: "general"
+    use_cases:
+      - "general business queries"
+      - "text analysis"
+      - "simple reasoning"
+
+  mistral:7b:
+    name: "mistral:7b"
+    description: "Mistral 7B - Advanced reasoning model"
+    max_tokens: 4096
+    context_window: 32768
+    temperature: 0.8
+    top_p: 0.9
+    top_k: 40
+    repeat_penalty: 1.1
+    specialty: "reasoning"
+    use_cases:
+      - "complex business logic"
+      - "multi-step reasoning"
+      - "detailed analysis"
+
+  codellama:7b:
+    name: "codellama:7b"
+    description: "Code Llama 7B - Code generation and analysis"
+    max_tokens: 2048
+    context_window: 16384
+    temperature: 0.3
+    top_p: 0.9
+    top_k: 40
+    repeat_penalty: 1.0
+    specialty: "code"
+    use_cases:
+      - "API code generation"
+      - "SQL query generation"
+      - "configuration generation"
+
+# Performance Settings
+performance:
+  # GPU settings (if available)
+  gpu:
+    enabled: false
+    device_id: 0
+    memory_fraction: 0.8
+
+  # CPU settings
+  cpu:
+    num_threads: 4
+    batch_size: 1
+
+  # Memory management
+  memory:
+    max_memory_gb: 8
+    swap_enabled: false
+
+  # Caching
+  cache:
+    enabled: true
+    max_size_mb: 1024
+    ttl_seconds: 3600
+
+# Quality and Safety Settings
+quality:
+  # Response validation
+  validation:
+    min_response_length: 10
+    max_response_length: 10000
+    filter_incomplete: true
+    filter_repetitive: true
+    repetition_threshold: 0.8
+
+  # Content filtering
+  content_filter:
+    enabled: true
+    blocked_topics:
+      - "harmful_content"
+      - "personal_information"
+      - "system_information"
+
+  # Response quality
+  quality_checks:
+    coherence_threshold: 0.7
+    relevance_threshold: 0.8
+    factuality_check: true
+
+# Business Logic Settings
+business:
+  # Prompt engineering
+  prompts:
+    system_prompt: |
+      You are a business logic assistant that generates executable actions based on business requirements and user requests.
+
+      IMPORTANT GUIDELINES:
+      1. Only generate actions that are explicitly defined in the business requirements
+      2. Always validate requests against available operations
+      3. Provide clear, structured responses in JSON format
+      4. If a request cannot be fulfilled, explain why and suggest alternatives
+      5. Focus on business value and practical implementation
+
+    # Template prompts for different scenarios
+    templates:
+      data_query: "Based on the business requirements, analyze this data request: {query}"
+      workflow_action: "Generate workflow actions for: {request}"
+      validation: "Validate this business operation: {operation}"
+      calculation: "Perform business calculation: {calculation}"
+
+  # Response formatting
+  response_format:
+    structured: true
+    include_reasoning: true
+    include_confidence: true
+    include_alternatives: true
+    json_schema: true
+
+# Monitoring and Logging
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    response_time: true
+    token_count: true
+    error_rate: true
+    model_usage: true
+
+  # Request logging
+  logging:
+    level: "info"
+    log_requests: true
+    log_responses: true
+    log_errors: true
+    max_log_length: 1000
+
+  # Health checks
+  health_check:
+    enabled: true
+    interval_seconds: 30
+    timeout_seconds: 5
+
+# Security Settings
+security:
+  # Authentication
+  auth:
+    enabled: false  # Set to true in production
+    api_key_required: false
+    jwt_validation: false
+
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_limit: 10
+    per_user: true
+
+  # Input validation
+  input_validation:
+    enabled: true
+    max_input_length: 50000
+    blocked_patterns:
+      - "system_prompt_injection"
+      - "instruction_override"
+      - "role_hijacking"
+
+# Development Settings
+development:
+  debug_mode: false
+  verbose_logging: false
+  save_conversations: false
+  model_switching: true
+  experimental_features: false
+
+# Production Settings
+production:
+  # Optimization
+  optimization:
+    preload_models: true
+    model_caching: true
+    response_caching: false
+    parallel_requests: false
+
+  # Reliability
+  reliability:
+    auto_restart: true
+    graceful_shutdown: true
+    health_monitoring: true
+    backup_model: "llama3.2:3b"
+
+  # Resource limits
+  limits:
+    max_concurrent_requests: 10
+    max_queue_size: 50
+    request_timeout: 60000
+    memory_limit_mb: 16384
+
+# Integration Settings
+integration:
+  # Vector database integration
+  vector_db:
+    enabled: true
+    type: "chromadb"
+    embedding_sync: true
+
+  # API integration
+  api:
+    business_service_url: "http://localhost:8000"
+    auth_service_url: "http://localhost:8001"
+    notification_service_url: "http://localhost:8002"
+
+  # Database integration
+  database:
+    type: "postgresql"
+    connection_pool_size: 10
+    query_timeout: 30000
+
+# Environment Specific Overrides
+environments:
+  local:
+    server:
+      host: "localhost"
+    models:
+      default: "llama3.2:3b"
+    development:
+      debug_mode: true
+      verbose_logging: true
+
+  docker:
+    server:
+      host: "0.0.0.0"
+      port: 11434
+    performance:
+      gpu:
+        enabled: false
+    production:
+      optimization:
+        preload_models: true
+
+  production:
+    server:
+      host: "ollama-service"
+      port: 11434
+    security:
+      auth:
+        enabled: true
+        api_key_required: true
+    production:
+      optimization:
+        preload_models: true
+        model_caching: true
+      reliability:
+        auto_restart: true
+        health_monitoring: true
+
+# Auto-configuration
+auto_config:
+  # Detect available models
+  detect_models: true
+
+  # Performance tuning
+  auto_tune_performance: false
+
+  # Resource optimization
+  optimize_for_memory: false
+  optimize_for_speed: true
+
+  # Model selection
+  auto_select_model: true
+  fallback_model: "llama3.2:3b"

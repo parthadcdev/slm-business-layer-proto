@@ -1,0 +1,497 @@
+# Security Configuration for SLM Business Service Layer
+
+# Authentication and Authorization
+auth:
+  # JWT Configuration
+  jwt:
+    secret: "${JWT_SECRET}"  # Use environment variable
+    algorithm: "HS256"
+    expires_in: "24h"
+    refresh_token_expires_in: "7d"
+    issuer: "slm-business-service"
+    audience: "business-users"
+
+  # Session Management
+  session:
+    timeout: 24  # hours
+    absolute_timeout: 168  # hours (7 days)
+    sliding_expiration: true
+    secure_cookies: true
+    same_site: "strict"
+    http_only: true
+
+  # OAuth/OIDC (if integrated)
+  oauth:
+    enabled: false
+    provider: "auth0"  # auth0, okta, azure, google
+    client_id: "${OAUTH_CLIENT_ID}"
+    client_secret: "${OAUTH_CLIENT_SECRET}"
+    redirect_uri: "http://localhost:8000/auth/callback"
+    scopes: ["openid", "profile", "email"]
+
+# Role-Based Access Control (RBAC)
+rbac:
+  # Default roles
+  roles:
+    super_admin:
+      level: 100
+      permissions: ["*"]
+      description: "Full system access"
+
+    admin:
+      level: 90
+      permissions:
+        - "system:read"
+        - "system:write"
+        - "system:configure"
+        - "users:*"
+        - "roles:*"
+        - "data:*"
+        - "api:*"
+        - "workflow:*"
+        - "business:*"
+      inherits: []
+
+    manager:
+      level: 70
+      permissions:
+        - "users:read"
+        - "users:write"
+        - "data:read"
+        - "data:write"
+        - "api:read"
+        - "api:write"
+        - "workflow:start"
+        - "workflow:continue"
+        - "workflow:complete"
+        - "business:*"
+      inherits: ["employee"]
+
+    employee:
+      level: 50
+      permissions:
+        - "users:read:own"
+        - "data:read"
+        - "api:read"
+        - "workflow:start"
+        - "workflow:continue"
+        - "business:validate"
+        - "business:calculate"
+      inherits: ["user"]
+
+    user:
+      level: 30
+      permissions:
+        - "users:read:own"
+        - "data:read:own"
+        - "business:validate"
+      inherits: []
+
+    readonly:
+      level: 20
+      permissions:
+        - "data:read"
+        - "api:read"
+      inherits: []
+
+    guest:
+      level: 10
+      permissions:
+        - "business:validate:basic"
+      inherits: []
+
+  # Permission enforcement
+  enforcement:
+    strict_mode: true
+    deny_by_default: true
+    audit_all_checks: true
+    cache_permissions: true
+    cache_ttl: 300  # 5 minutes
+
+# API Security
+api_security:
+  # Rate Limiting
+  rate_limiting:
+    enabled: true
+
+    # Global limits
+    global:
+      requests_per_minute: 1000
+      burst_limit: 100
+
+    # Per-user limits
+    per_user:
+      requests_per_minute: 100
+      burst_limit: 20
+
+    # Per-endpoint limits
+    endpoints:
+      "/api/business-request":
+        requests_per_minute: 50
+        burst_limit: 10
+      "/api/slm/generate":
+        requests_per_minute: 20
+        burst_limit: 5
+
+  # Request validation
+  validation:
+    max_request_size: "10mb"
+    max_payload_size: "5mb"
+    max_header_size: "8kb"
+    timeout: 30000  # 30 seconds
+
+    # Content validation
+    content_type_validation: true
+    allowed_content_types:
+      - "application/json"
+      - "text/plain"
+      - "multipart/form-data"
+
+  # CORS Configuration
+  cors:
+    enabled: true
+    origins:
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+      - "X-Requested-With"
+    credentials: true
+    max_age: 86400  # 24 hours
+
+  # API Keys (alternative to JWT)
+  api_keys:
+    enabled: false
+    header_name: "X-API-Key"
+    query_param: "api_key"
+    validation_endpoint: "/auth/validate-key"
+
+# Input Security and Sanitization
+input_security:
+  # Prompt injection prevention
+  prompt_injection:
+    enabled: true
+    strict_mode: true
+
+    # Detection patterns
+    patterns:
+      high_risk:
+        - "ignore previous instructions"
+        - "system prompt"
+        - "developer mode"
+        - "jailbreak"
+      medium_risk:
+        - "pretend to be"
+        - "act as"
+        - "roleplay"
+      low_risk:
+        - "bypass"
+        - "override"
+
+  # Content filtering
+  content_filter:
+    enabled: true
+
+    # Blocked content categories
+    blocked_categories:
+      - "malicious_code"
+      - "sql_injection"
+      - "xss_attempts"
+      - "command_injection"
+      - "path_traversal"
+      - "sensitive_data"
+
+  # Input validation
+  validation:
+    max_input_length: 50000
+    max_line_length: 1000
+    max_lines: 500
+    strip_html: true
+    normalize_unicode: true
+
+    # Character filtering
+    allowed_characters: "printable"
+    block_control_chars: true
+    block_zero_width: true
+
+# Data Protection
+data_protection:
+  # Encryption
+  encryption:
+    at_rest:
+      enabled: false  # Requires additional configuration
+      algorithm: "AES-256-GCM"
+      key_rotation_days: 90
+
+    in_transit:
+      tls_version: "1.3"
+      cipher_suites:
+        - "TLS_AES_256_GCM_SHA384"
+        - "TLS_CHACHA20_POLY1305_SHA256"
+      certificate_validation: true
+
+  # Data masking
+  masking:
+    enabled: true
+
+    # PII patterns
+    pii_patterns:
+      ssn: '\b\d{3}-\d{2}-\d{4}\b'
+      credit_card: '\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+      email: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+      phone: '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+
+    # Masking strategies
+    strategies:
+      ssn: "XXX-XX-{last4}"
+      credit_card: "****-****-****-{last4}"
+      email: "{first3}***@{domain}"
+      phone: "***-***-{last4}"
+
+  # Data retention
+  retention:
+    default_retention_days: 365
+
+    # Category-specific retention
+    categories:
+      audit_logs: 2555  # 7 years
+      security_logs: 1095  # 3 years
+      user_data: 730  # 2 years
+      session_data: 30  # 30 days
+
+# Security Monitoring
+monitoring:
+  # Security events
+  security_events:
+    enabled: true
+    real_time_alerts: true
+
+    # Event categories
+    categories:
+      authentication_failures:
+        threshold: 5
+        window_minutes: 15
+        action: "block_ip"
+
+      permission_violations:
+        threshold: 3
+        window_minutes: 10
+        action: "alert_admin"
+
+      prompt_injection_attempts:
+        threshold: 1
+        window_minutes: 5
+        action: "block_user"
+
+      rate_limit_exceeded:
+        threshold: 10
+        window_minutes: 30
+        action: "throttle"
+
+  # Intrusion detection
+  intrusion_detection:
+    enabled: true
+
+    # Behavioral analysis
+    behavioral:
+      track_user_patterns: true
+      anomaly_detection: true
+      deviation_threshold: 2.0  # standard deviations
+
+    # Network analysis
+    network:
+      monitor_ip_reputation: false  # Requires external service
+      geolocation_checking: false
+      suspicious_patterns: true
+
+  # Audit logging
+  audit_logging:
+    enabled: true
+
+    # Audit categories
+    categories:
+      - "authentication"
+      - "authorization"
+      - "data_access"
+      - "configuration_changes"
+      - "admin_actions"
+      - "security_events"
+
+    # Storage settings
+    storage:
+      retention_days: 2555  # 7 years
+      compression: true
+      encryption: true
+      tamper_protection: true
+
+# Compliance and Standards
+compliance:
+  # Standards compliance
+  standards:
+    iso27001: false
+    sox: false
+    gdpr: true
+    ccpa: false
+    hipaa: false
+
+  # GDPR compliance
+  gdpr:
+    enabled: true
+
+    # Data subject rights
+    data_subject_rights:
+      access: true
+      rectification: true
+      erasure: true
+      portability: true
+      restriction: true
+      objection: true
+
+    # Consent management
+    consent:
+      explicit_consent: true
+      consent_withdrawal: true
+      consent_logging: true
+
+  # Reporting
+  reporting:
+    compliance_reports: true
+    security_metrics: true
+    incident_reports: true
+    audit_trails: true
+
+# Incident Response
+incident_response:
+  # Automated responses
+  automated_responses:
+    enabled: true
+
+    # Response actions
+    actions:
+      block_ip:
+        duration_minutes: 60
+        escalation_threshold: 3
+
+      block_user:
+        duration_minutes: 30
+        admin_notification: true
+
+      throttle:
+        reduction_factor: 0.5
+        duration_minutes: 15
+
+  # Alerting
+  alerting:
+    enabled: true
+
+    # Alert channels
+    channels:
+      email: true
+      webhook: false
+      sms: false
+      slack: false
+
+    # Alert thresholds
+    thresholds:
+      critical: 1
+      high: 3
+      medium: 10
+      low: 50
+
+  # Recovery
+  recovery:
+    automatic_recovery: true
+    recovery_time_objective: 15  # minutes
+    recovery_point_objective: 60  # minutes
+
+# Development and Testing
+development:
+  # Security testing
+  security_testing:
+    enabled: true
+
+    # Test categories
+    categories:
+      - "input_validation"
+      - "authentication"
+      - "authorization"
+      - "session_management"
+      - "injection_attacks"
+
+    # Automated scanning
+    automated_scans:
+      dependency_check: true
+      static_analysis: false
+      dynamic_analysis: false
+
+  # Development security
+  dev_security:
+    secure_defaults: true
+    security_headers: true
+    debug_protection: true
+    test_data_masking: true
+
+# Production Security
+production:
+  # Hardening
+  hardening:
+    security_headers:
+      enabled: true
+      headers:
+        - "X-Content-Type-Options: nosniff"
+        - "X-Frame-Options: DENY"
+        - "X-XSS-Protection: 1; mode=block"
+        - "Strict-Transport-Security: max-age=31536000"
+        - "Content-Security-Policy: default-src 'self'"
+
+    # Server hardening
+    server:
+      hide_version_info: true
+      disable_trace_method: true
+      secure_error_pages: true
+      request_size_limits: true
+
+  # High availability security
+  ha_security:
+    session_replication: true
+    security_state_sync: true
+    distributed_rate_limiting: true
+    cross_node_monitoring: true
+
+# Environment-specific overrides
+environments:
+  development:
+    rbac:
+      enforcement:
+        strict_mode: false
+    input_security:
+      prompt_injection:
+        strict_mode: false
+    monitoring:
+      security_events:
+        real_time_alerts: false
+
+  testing:
+    data_protection:
+      masking:
+        enabled: true
+      retention:
+        default_retention_days: 30
+    development:
+      dev_security:
+        test_data_masking: true
+
+  production:
+    auth:
+      session:
+        secure_cookies: true
+    data_protection:
+      encryption:
+        at_rest:
+          enabled: true
+    production:
+      hardening:
+        security_headers:
+          enabled: true

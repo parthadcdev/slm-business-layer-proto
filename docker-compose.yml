@@ -1,0 +1,348 @@
+# Docker Compose for SLM-Powered Business Service Layer
+version: '3.8'
+
+services:
+  # Ollama SLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: slm-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./models:/root/.ollama
+      - ./config/ollama-config.yaml:/app/config/ollama-config.yaml
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - slm-network
+
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: slm-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+      - ./config/chromadb-config.yaml:/app/config/chromadb-config.yaml
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - slm-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: slm-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      - POSTGRES_DB=business_app
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_password
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d business_app"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - slm-network
+
+  # Redis Cache and Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: slm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - slm-network
+
+  # Node.js Orchestration Service
+  orchestration:
+    build:
+      context: .
+      dockerfile: docker/orchestration.Dockerfile
+    container_name: slm-orchestration
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=info
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - OLLAMA_URL=http://ollama:11434
+      - CHROMADB_URL=http://chromadb:8000
+      - POSTGRES_URL=postgresql://app_user:app_password@postgres:5432/business_app
+      - REDIS_URL=redis://redis:6379
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8001
+    depends_on:
+      - ollama
+      - chromadb
+      - postgres
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - slm-network
+    profiles:
+      - full
+
+  # Python Embedding Service (Sentence Transformers)
+  embedding-service:
+    build:
+      context: .
+      dockerfile: docker/embedding.Dockerfile
+    container_name: slm-embedding
+    ports:
+      - "8002:8001"
+    volumes:
+      - embedding_models:/app/models
+      - embedding_cache:/app/cache
+    environment:
+      - MODEL_NAME=all-MiniLM-L6-v2
+      - DEVICE=cpu
+      - MAX_BATCH_SIZE=32
+      - CACHE_SIZE=1000
+      - HOST=0.0.0.0
+      - PORT=8001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - slm-network
+    profiles:
+      - full
+
+  # Traefik Reverse Proxy and Load Balancer
+  traefik:
+    image: traefik:v3.0
+    container_name: slm-traefik
+    ports:
+      - "80:80"
+      - "8080:8080"  # Traefik dashboard
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/etc/traefik
+      - ./certs:/certs
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --metrics.prometheus=true
+      - --log.level=INFO
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+    restart: unless-stopped
+    networks:
+      - slm-network
+
+  # Nginx (Alternative to Traefik)
+  nginx:
+    image: nginx:alpine
+    container_name: slm-nginx
+    ports:
+      - "8090:80"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/nginx/sites:/etc/nginx/conf.d
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - orchestration
+    restart: unless-stopped
+    profiles:
+      - nginx
+    networks:
+      - slm-network
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: slm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    networks:
+      - slm-network
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: slm-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    networks:
+      - slm-network
+
+  # Logging - Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: slm-elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    restart: unless-stopped
+    profiles:
+      - logging
+    networks:
+      - slm-network
+
+  # Logging - Logstash
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    container_name: slm-logstash
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    volumes:
+      - ./config/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./config/logstash/config:/usr/share/logstash/config
+      - ./logs:/app/logs
+    environment:
+      - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    profiles:
+      - logging
+    networks:
+      - slm-network
+
+  # Logging - Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    container_name: slm-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    profiles:
+      - logging
+    networks:
+      - slm-network
+
+  # Security - OWASP ZAP (for security testing)
+  zap:
+    image: owasp/zap2docker-stable
+    container_name: slm-zap
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./security/zap:/zap/wrk
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true
+    restart: unless-stopped
+    profiles:
+      - security-testing
+    networks:
+      - slm-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  embedding_models:
+    driver: local
+  embedding_cache:
+    driver: local
+
+networks:
+  slm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

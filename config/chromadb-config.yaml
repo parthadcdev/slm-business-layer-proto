@@ -1,0 +1,387 @@
+# ChromaDB Configuration for RAG Implementation
+
+# Server Configuration
+server:
+  host: "localhost"
+  port: 8000
+  base_url: "http://localhost:8000"
+  timeout: 10000  # 10 seconds
+  max_retries: 3
+
+# Database Configuration
+database:
+  # Storage settings
+  storage:
+    persist_directory: "./chroma_data"
+    allow_reset: false  # Set to true in development only
+    anonymized_telemetry: false
+
+  # Collection settings
+  collection:
+    name: "business_requirements"
+    metadata:
+      description: "Business requirements and documentation storage"
+      version: "1.0"
+      created_by: "slm-business-service"
+
+  # Performance settings
+  performance:
+    max_batch_size: 1000
+    query_batch_size: 100
+    index_batch_size: 1000
+    max_memory_mb: 2048
+
+# Embedding Configuration
+embeddings:
+  # Default embedding function
+  function: "sentence-transformers"
+
+  # Embedding models
+  models:
+    default: "all-MiniLM-L6-v2"
+
+    # Available models
+    all-MiniLM-L6-v2:
+      name: "all-MiniLM-L6-v2"
+      dimensions: 384
+      max_seq_length: 256
+      description: "Fast and efficient general purpose embeddings"
+      use_cases:
+        - "general text similarity"
+        - "document search"
+        - "quick prototyping"
+
+    all-mpnet-base-v2:
+      name: "all-mpnet-base-v2"
+      dimensions: 768
+      max_seq_length: 384
+      description: "High quality general purpose embeddings"
+      use_cases:
+        - "high accuracy requirements"
+        - "complex document understanding"
+        - "production deployments"
+
+    multi-qa-MiniLM-L6-cos-v1:
+      name: "multi-qa-MiniLM-L6-cos-v1"
+      dimensions: 384
+      max_seq_length: 512
+      description: "Optimized for question-answering tasks"
+      use_cases:
+        - "Q&A systems"
+        - "business query matching"
+        - "FAQ retrieval"
+
+  # Embedding service settings
+  service:
+    type: "local"  # local, openai, huggingface
+    url: "http://localhost:8001"
+    api_key: ""  # For external services
+    timeout: 30000
+    batch_processing: true
+
+# Vector Store Settings
+vector_store:
+  # Indexing configuration
+  indexing:
+    algorithm: "HNSW"  # Hierarchical Navigable Small World
+    space: "cosine"    # cosine, l2, ip (inner product)
+
+    # HNSW parameters
+    hnsw:
+      M: 16              # Number of bi-directional links
+      ef_construction: 200  # Size of the dynamic candidate list
+      ef_search: 50         # Size of the dynamic candidate list during search
+      max_m: 16
+      max_m0: 32
+
+  # Search configuration
+  search:
+    default_n_results: 5
+    max_n_results: 100
+    similarity_threshold: 0.3
+    include_metadata: true
+    include_documents: true
+    include_distances: true
+
+  # Distance functions
+  distance:
+    default: "cosine"
+    available:
+      - "cosine"
+      - "l2"
+      - "ip"
+
+# Document Processing
+documents:
+  # Chunking configuration
+  chunking:
+    strategy: "semantic"  # fixed, semantic, overlap
+    chunk_size: 1000
+    chunk_overlap: 200
+    min_chunk_size: 100
+    max_chunk_size: 2000
+
+  # Preprocessing
+  preprocessing:
+    normalize_whitespace: true
+    remove_empty_chunks: true
+    filter_duplicates: true
+    duplicate_threshold: 0.95
+
+  # Metadata extraction
+  metadata:
+    extract_keywords: true
+    extract_entities: true
+    calculate_readability: true
+    detect_language: true
+    extract_structure: true
+
+# Collection Management
+collections:
+  # Auto-management
+  auto_create: true
+  auto_migrate: true
+
+  # Multiple collections for different document types
+  business_requirements:
+    name: "business_requirements"
+    description: "Business requirements documents and specifications"
+    embedding_model: "multi-qa-MiniLM-L6-cos-v1"
+    chunk_size: 800
+    metadata_schema:
+      - "document_type"
+      - "priority"
+      - "department"
+      - "last_updated"
+
+  api_documentation:
+    name: "api_documentation"
+    description: "API documentation and technical specifications"
+    embedding_model: "all-mpnet-base-v2"
+    chunk_size: 1200
+    metadata_schema:
+      - "api_version"
+      - "endpoint"
+      - "method"
+      - "tags"
+
+  policies:
+    name: "policies"
+    description: "Company policies and procedures"
+    embedding_model: "all-MiniLM-L6-v2"
+    chunk_size: 600
+    metadata_schema:
+      - "policy_type"
+      - "effective_date"
+      - "department"
+      - "compliance_level"
+
+# Query Processing
+query:
+  # Query enhancement
+  enhancement:
+    enabled: true
+    expand_synonyms: true
+    spell_check: false
+    query_rewriting: true
+
+  # Retrieval strategies
+  retrieval:
+    strategy: "hybrid"  # semantic, keyword, hybrid
+
+    # Hybrid search settings
+    hybrid:
+      semantic_weight: 0.7
+      keyword_weight: 0.3
+      rerank: true
+      rerank_top_k: 20
+
+  # Post-processing
+  post_processing:
+    deduplicate: true
+    rerank_by_relevance: true
+    filter_by_confidence: true
+    confidence_threshold: 0.5
+
+# Monitoring and Logging
+monitoring:
+  # Performance metrics
+  metrics:
+    enabled: true
+    track_query_time: true
+    track_index_time: true
+    track_memory_usage: true
+    track_collection_size: true
+
+  # Query logging
+  logging:
+    level: "info"
+    log_queries: true
+    log_results: false  # Set to true for debugging
+    log_performance: true
+    max_log_size_mb: 100
+
+  # Health monitoring
+  health:
+    check_interval: 30
+    collection_health: true
+    embedding_service_health: true
+    storage_health: true
+
+# Security and Privacy
+security:
+  # Authentication
+  auth:
+    enabled: false  # Set to true in production
+    api_key_required: false
+    client_cert_required: false
+
+  # Data privacy
+  privacy:
+    encrypt_at_rest: false  # Requires additional setup
+    anonymize_logs: true
+    data_retention_days: 365
+    pii_detection: true
+    pii_filtering: true
+
+  # Access control
+  access_control:
+    collection_level: false
+    document_level: false
+    user_isolation: false
+
+# Backup and Recovery
+backup:
+  # Automatic backup
+  auto_backup:
+    enabled: true
+    interval_hours: 24
+    retention_days: 30
+    backup_path: "./backups/chromadb"
+
+  # Backup compression
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+
+  # Recovery settings
+  recovery:
+    auto_recovery: true
+    verify_integrity: true
+    rollback_on_failure: true
+
+# Performance Optimization
+optimization:
+  # Memory management
+  memory:
+    cache_size_mb: 1024
+    preload_frequent_collections: true
+    lazy_loading: true
+    garbage_collection_threshold: 0.8
+
+  # Query optimization
+  query_optimization:
+    cache_queries: true
+    cache_size: 1000
+    cache_ttl_seconds: 3600
+    parallel_search: false
+    batch_queries: true
+
+  # Storage optimization
+  storage:
+    compression: true
+    compact_interval_hours: 24
+    vacuum_threshold: 0.3
+    optimize_indices: true
+
+# Environment Settings
+environments:
+  development:
+    server:
+      host: "localhost"
+    database:
+      allow_reset: true
+    monitoring:
+      logging:
+        level: "debug"
+        log_results: true
+
+  docker:
+    server:
+      host: "0.0.0.0"
+    database:
+      persist_directory: "/chroma/chroma"
+    backup:
+      backup_path: "/chroma/backups"
+
+  production:
+    server:
+      host: "chromadb-service"
+    security:
+      auth:
+        enabled: true
+        api_key_required: true
+      privacy:
+        encrypt_at_rest: true
+        anonymize_logs: true
+    optimization:
+      memory:
+        cache_size_mb: 4096
+      storage:
+        compression: true
+
+# Migration and Versioning
+migration:
+  auto_migrate: true
+  backup_before_migration: true
+  version_tracking: true
+  rollback_capability: true
+
+# Integration Settings
+integration:
+  # Document loaders
+  document_loaders:
+    pdf: true
+    docx: true
+    txt: true
+    md: true
+    json: true
+    csv: false
+    html: false
+
+  # External services
+  external_services:
+    embedding_service:
+      enabled: true
+      health_check: true
+      fallback: "local"
+
+  # APIs
+  apis:
+    rest_api: true
+    graphql_api: false
+    grpc_api: false
+
+# Troubleshooting
+troubleshooting:
+  # Debug settings
+  debug:
+    verbose_logging: false
+    trace_queries: false
+    profile_performance: false
+    dump_indices: false
+
+  # Error handling
+  error_handling:
+    retry_failed_operations: true
+    max_retry_attempts: 3
+    exponential_backoff: true
+    fallback_strategies: true
+
+  # Diagnostics
+  diagnostics:
+    health_checks: true
+    performance_tests: false
+    data_validation: true
+    consistency_checks: false
