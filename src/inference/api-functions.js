@@ -1,6 +1,7 @@
 // Pre-approved API operations
 const axios = require('axios');
 const https = require('https');
+const { urlBuilder } = require('../../config/service-urls');
 
 class APIFunctions {
   constructor() {
@@ -13,19 +14,19 @@ class APIFunctions {
 
     this.allowedOperations = {
       'user-service': {
-        baseUrl: process.env.USER_SERVICE_URL || 'http://localhost:3001',
+        baseUrl: urlBuilder.getBaseUrl('userService'),
         operations: ['getUser', 'updateProfile', 'validateUser']
       },
       'order-service': {
-        baseUrl: process.env.ORDER_SERVICE_URL || 'http://localhost:3002',
+        baseUrl: urlBuilder.getBaseUrl('orderServiceLegacy'),
         operations: ['createOrder', 'getOrder', 'updateOrderStatus', 'cancelOrder']
       },
       'payment-service': {
-        baseUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3003',
+        baseUrl: urlBuilder.getBaseUrl('paymentService'),
         operations: ['processPayment', 'refundPayment', 'getPaymentStatus']
       },
       'notification-service': {
-        baseUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004',
+        baseUrl: urlBuilder.getBaseUrl('notificationService'),
         operations: ['sendEmail', 'sendSMS', 'sendPushNotification']
       }
     };

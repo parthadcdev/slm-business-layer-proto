@@ -1,10 +1,11 @@
 // Local embedding service using sentence-transformers
 const axios = require('axios');
+const { urlBuilder } = require('../../config/service-urls');
 
 class EmbeddingService {
   constructor() {
     this.model = process.env.EMBEDDING_MODEL || 'all-MiniLM-L6-v2';
-    this.serviceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8001';
+    this.serviceUrl = urlBuilder.getBaseUrl('embeddingService');
     this.maxTextLength = 8192;
     this.batchSize = 32;
   }
@@ -19,7 +20,7 @@ class EmbeddingService {
         text = text.substring(0, this.maxTextLength);
       }
 
-      const response = await axios.post(`${this.serviceUrl}/embed`, {
+      const response = await axios.post(urlBuilder.build('embeddingService', 'embed'), {
         text: text,
         model: this.model
       }, {
@@ -60,7 +61,7 @@ class EmbeddingService {
       for (let i = 0; i < processedTexts.length; i += this.batchSize) {
         const batch = processedTexts.slice(i, i + this.batchSize);
 
-        const response = await axios.post(`${this.serviceUrl}/embed_batch`, {
+        const response = await axios.post(urlBuilder.build('embeddingService', 'embed'), {
           texts: batch,
           model: this.model
         }, {
@@ -134,7 +135,7 @@ class EmbeddingService {
 
   async checkServiceHealth() {
     try {
-      const response = await axios.get(`${this.serviceUrl}/health`, {
+      const response = await axios.get(urlBuilder.build('embeddingService', 'health'), {
         timeout: 5000
       });
 
@@ -155,7 +156,7 @@ class EmbeddingService {
 
   async getModelInfo() {
     try {
-      const response = await axios.get(`${this.serviceUrl}/model_info`, {
+      const response = await axios.get(urlBuilder.build('embeddingService', 'health'), {
         timeout: 5000
       });
 

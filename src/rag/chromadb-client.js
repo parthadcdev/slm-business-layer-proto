@@ -4,29 +4,22 @@
  * @author Partha Chandramohan
  * @description ChromaDB client for local vector storage and semantic search operations
  */
-const { ChromaApi, OpenAIEmbeddingFunction, Configuration } = require('chromadb');
+const chromadb = require('chromadb');
+const { urlBuilder } = require('../../config/service-urls');
 
 class ChromaDBClient {
   constructor() {
     this.client = null;
     this.collection = null;
-    this.embeddingFunction = null;
     this.collectionName = 'business_requirements';
     this.initialized = false;
   }
 
   async initialize() {
     try {
-      const config = new Configuration({
-        basePath: process.env.CHROMADB_URL || 'http://localhost:8000'
-      });
-
-      this.client = new ChromaApi(config);
-
-      // Initialize embedding function
-      this.embeddingFunction = new OpenAIEmbeddingFunction({
-        openai_api_key: process.env.OPENAI_API_KEY || '',
-        openai_model: process.env.EMBEDDING_MODEL || 'text-embedding-ada-002'
+      // Use ChromaDB client directly
+      this.client = new chromadb.HttpClient({
+        path: urlBuilder.getBaseUrl('chromadb')
       });
 
       // Create or get collection
@@ -44,15 +37,13 @@ class ChromaDBClient {
     try {
       // Try to get existing collection
       this.collection = await this.client.getCollection({
-        name: this.collectionName,
-        embeddingFunction: this.embeddingFunction
+        name: this.collectionName
       });
       console.log(`Connected to existing collection: ${this.collectionName}`);
     } catch (error) {
       // Create new collection if it doesn't exist
       this.collection = await this.client.createCollection({
         name: this.collectionName,
-        embeddingFunction: this.embeddingFunction,
         metadata: {
           description: 'Business requirements and documentation storage',
           created_at: new Date().toISOString()
@@ -182,7 +173,7 @@ class ChromaDBClient {
       return {
         documentCount: count,
         collectionName: this.collectionName,
-        embeddingModel: this.embeddingFunction?.openai_model || 'unknown',
+        embeddingModel: 'sentence-transformers',
         lastUpdated: new Date().toISOString()
       };
     } catch (error) {

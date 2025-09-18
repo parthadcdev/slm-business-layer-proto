@@ -236,7 +236,8 @@ Generated: ${new Date().toLocaleString()}
             const services = [
                 { name: 'Main API', url: `${API_BASE}/health` },
                 { name: 'ChromaDB', url: `${API_BASE}/api/service-status/chromadb` },
-                { name: 'Ollama', url: `${API_BASE}/api/service-status/ollama` }
+                { name: 'Ollama', url: `${API_BASE}/api/service-status/ollama` },
+                { name: 'PostgreSQL', url: `${API_BASE}/api/service-status/postgres` }
             ];
 
             let results = 'Service Status Check:\n\n';

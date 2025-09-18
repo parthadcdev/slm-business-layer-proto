@@ -5,10 +5,11 @@
  * @description Ollama API client for SLM inference, model management, and connection pooling
  */
 const axios = require('axios');
+const { urlBuilder } = require('../../config/service-urls');
 
 class OllamaClient {
   constructor() {
-    this.baseURL = process.env.OLLAMA_URL || 'http://localhost:11434';
+    this.baseURL = urlBuilder.getBaseUrl('ollama');
     this.timeout = 30000; // 30 seconds
     this.retryAttempts = 3;
   }
@@ -30,7 +31,7 @@ class OllamaClient {
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
         const response = await axios.post(
-          `${this.baseURL}/api/generate`,
+          urlBuilder.build('ollama', 'generate'),
           requestData,
           {
             timeout: this.timeout,
@@ -62,7 +63,7 @@ class OllamaClient {
 
   async listModels() {
     try {
-      const response = await axios.get(`${this.baseURL}/api/tags`);
+      const response = await axios.get(urlBuilder.build('ollama', 'tags'));
       return response.data.models || [];
     } catch (error) {
       console.error('Failed to list models:', error.message);
@@ -73,7 +74,7 @@ class OllamaClient {
   async pullModel(modelName) {
     try {
       const response = await axios.post(
-        `${this.baseURL}/api/pull`,
+        urlBuilder.build('ollama', 'pull'),
         { name: modelName },
         { timeout: 300000 } // 5 minutes for model pulling
       );
@@ -86,7 +87,7 @@ class OllamaClient {
 
   async checkHealth() {
     try {
-      const response = await axios.get(`${this.baseURL}/api/tags`, {
+      const response = await axios.get(urlBuilder.build('ollama', 'tags'), {
         timeout: 5000
       });
       return {
@@ -98,6 +99,18 @@ class OllamaClient {
         healthy: false,
         error: error.message
       };
+    }
+  }
+
+  async listAvailableModels() {
+    try {
+      const response = await axios.get(urlBuilder.build('ollama', 'tags'), {
+        timeout: 5000
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to list available models:', error.message);
+      return { models: [] };
     }
   }
 
