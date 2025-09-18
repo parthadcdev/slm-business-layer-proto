@@ -361,17 +361,179 @@ curl -X POST http://localhost:8001/api/business-request \
 - **Database Schema**: `database/schema.sql`
 - **Sample Data**: `database/sample_data.sql`
 - **Database Docs**: `database/README.md`
+- **Service Management**: `scripts/manage-services.sh`
+- **Development Workflow**: `scripts/dev-workflow.sh`
 - **Troubleshooting**: `scripts/troubleshoot-services.sh`
 - **Core Service**: `src/orchestration/app.js`
 - **SQL Generator**: `src/ai/sql-generator.js`
 
+## 🔧 Developer Scripts & Workflow
+
+### Service Management Script (`scripts/manage-services.sh`)
+Comprehensive service management for all system components:
+
+**Usage:**
+```bash
+# Service lifecycle management
+./scripts/manage-services.sh start              # Start all services
+./scripts/manage-services.sh stop               # Stop all services
+./scripts/manage-services.sh restart            # Restart all services
+./scripts/manage-services.sh status             # Show service status
+
+# Individual service management
+./scripts/manage-services.sh docker-only start     # Docker services only
+./scripts/manage-services.sh orchestration-only start  # Node.js service only
+
+# Monitoring and diagnostics
+./scripts/manage-services.sh health             # Health checks
+./scripts/manage-services.sh test               # Run service tests
+./scripts/manage-services.sh cleanup            # Clean resources
+```
+
+**Key Features:**
+- ✅ Manages Docker services (PostgreSQL, ChromaDB, Ollama, Redis)
+- ✅ Handles Node.js orchestration service with PID tracking
+- ✅ Health checks for all services with proper URL testing
+- ✅ Intelligent service startup with dependency checking
+- ✅ Comprehensive status reporting with port usage
+- ✅ Integrated testing and diagnostics
+- ✅ Resource cleanup and log management
+
+### Development Workflow Script (`scripts/dev-workflow.sh`)
+Complete development lifecycle automation for building, testing, and deploying changes:
+
+**Usage:**
+```bash
+# Full development workflow
+./scripts/dev-workflow.sh full                 # Complete: lint → build → test → package → deploy
+
+# Individual workflow steps
+./scripts/dev-workflow.sh lint                 # Code linting and formatting
+./scripts/dev-workflow.sh build                # Build project for deployment
+./scripts/dev-workflow.sh test                 # Run all tests
+./scripts/dev-workflow.sh package              # Create deployment package
+./scripts/dev-workflow.sh deploy               # Deploy locally with restart
+
+# Development productivity
+./scripts/dev-workflow.sh watch                # Auto-restart on file changes
+./scripts/dev-workflow.sh clean                # Clean build artifacts
+./scripts/dev-workflow.sh deps                 # Install/update dependencies
+
+# Targeted testing
+./scripts/dev-workflow.sh test unit            # Unit tests only
+./scripts/dev-workflow.sh test health          # Service health tests only
+./scripts/dev-workflow.sh test int             # Integration tests only
+```
+
+**Key Features:**
+- ✅ **Automated Linting**: ESLint and Prettier integration with auto-configuration
+- ✅ **Smart Building**: Production-ready build with dependency optimization
+- ✅ **Comprehensive Testing**: Unit, integration, and health test automation
+- ✅ **Package Management**: Versioned deployment packages with checksums
+- ✅ **Local Deployment**: Safe deployment with automatic backup and rollback
+- ✅ **Watch Mode**: Real-time development with auto-restart on file changes
+- ✅ **Clean Operations**: Intelligent cleanup of artifacts, logs, and resources
+- ✅ **Dependency Management**: Node.js version checking and package installation
+
+### Developer Workflow Best Practices
+
+**Daily Development Cycle:**
+```bash
+# 1. Start your development session
+./scripts/manage-services.sh start
+
+# 2. Enable watch mode for real-time feedback
+./scripts/dev-workflow.sh watch
+# (Runs in background, auto-restarts on file changes)
+
+# 3. Make your code changes
+# Edit files in src/
+
+# 4. Before committing - run quality checks
+./scripts/dev-workflow.sh lint
+./scripts/dev-workflow.sh test
+
+# 5. Create deployable build when ready
+./scripts/dev-workflow.sh full
+```
+
+**Quick Development Commands:**
+```bash
+# Start fresh development environment
+./scripts/manage-services.sh restart && ./scripts/dev-workflow.sh watch
+
+# Check everything is working
+./scripts/manage-services.sh health && ./scripts/dev-workflow.sh test health
+
+# Complete build and deployment
+./scripts/dev-workflow.sh full
+
+# Clean slate (when things go wrong)
+./scripts/dev-workflow.sh clean && ./scripts/manage-services.sh restart
+```
+
+**CI/CD Pipeline Simulation:**
+```bash
+# Simulate continuous integration locally
+./scripts/dev-workflow.sh lint     # ← CI: Code quality
+./scripts/dev-workflow.sh test     # ← CI: Testing
+./scripts/dev-workflow.sh build    # ← CI: Build
+./scripts/dev-workflow.sh package  # ← CD: Package
+./scripts/dev-workflow.sh deploy   # ← CD: Deploy
+```
+
+### Script Dependencies
+
+**Required Tools:**
+- **Node.js 18+**: JavaScript runtime
+- **Docker & Docker Compose**: Container orchestration
+- **curl**: HTTP testing (usually pre-installed)
+- **jq**: JSON processing (optional, for advanced testing)
+
+**Optional Tools (Enhanced Features):**
+- **fswatch**: File watching for auto-restart (macOS: `brew install fswatch`)
+- **ESLint/Prettier**: Code quality (auto-installed via npm)
+
+### Troubleshooting Scripts
+
+**Common Issues:**
+```bash
+# Services won't start
+./scripts/manage-services.sh status           # Check what's running
+./scripts/troubleshoot-services.sh postgres-diag  # Database diagnostics
+
+# Port conflicts
+./scripts/manage-services.sh status           # Shows port usage
+lsof -i :8001                                # Check specific port
+
+# Build/test failures
+./scripts/dev-workflow.sh clean              # Clean and retry
+rm -rf node_modules && npm install           # Reset dependencies
+
+# Performance issues
+./scripts/manage-services.sh cleanup         # Clean Docker resources
+./scripts/dev-workflow.sh clean              # Clean build artifacts
+```
+
+### Script Maintenance
+
+**File Locations:**
+- **Service Management**: `scripts/manage-services.sh` (already existed, comprehensive)
+- **Development Workflow**: `scripts/dev-workflow.sh` (newly created)
+- **Troubleshooting**: `scripts/troubleshoot-services.sh` (existing diagnostic tool)
+
+**Customization:**
+Both scripts are designed to be self-documenting and easily customizable. Key configuration variables are at the top of each script for easy modification.
+
 ### System Reset Procedure
 ```bash
 # Complete system reset (nuclear option)
+./scripts/manage-services.sh stop
+./scripts/dev-workflow.sh clean
 docker-compose down
-docker volume prune
+docker volume prune -f
 docker-compose up -d
-node src/orchestration/app.js
+./scripts/manage-services.sh start
 ```
 
 ## 🚀 Future Enhancement Roadmap
