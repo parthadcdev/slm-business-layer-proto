@@ -17,6 +17,10 @@ const contextManager = require('./context-manager');
 const dbAdapter = require('../database/ai-database-adapter');
 const jwt = require('jsonwebtoken');
 const { urlBuilder } = require('../../config/service-urls');
+const securityConfig = require('../config/security-config');
+const parallelProcessor = require('../utils/parallel-processor');
+const errorHandler = require('../utils/error-handler');
+const resourceMonitor = require('../utils/resource-monitor');
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -136,27 +140,34 @@ app.post('/api/clear-ai-cache', async (req, res) => {
 app.post('/api/generate-token', (req, res) => {
   try {
     const { userId = 'browser-user', role = 'admin', email = 'browser@test.com' } = req.body;
+    const jwtConfig = securityConfig.get('jwt');
 
     const token = jwt.sign(
       {
         id: userId,
         role: role,
-        email: email
+        email: email,
+        iss: jwtConfig.issuer,
+        aud: jwtConfig.audience
       },
-      process.env.JWT_SECRET || 'default-secret',
-      { expiresIn: '24h' }
+      jwtConfig.secret,
+      {
+        expiresIn: jwtConfig.expiresIn,
+        algorithm: jwtConfig.algorithm
+      }
     );
 
     res.json({
       success: true,
       token: token,
-      expiresIn: '24h',
+      expiresIn: jwtConfig.expiresIn,
       user: { id: userId, role: role, email: email }
     });
   } catch (error) {
+    console.error('Token generation error:', securityConfig.sanitizeForLogging ? securityConfig.sanitizeForLogging(error.message) : error.message);
     res.status(500).json({
       success: false,
-      error: 'Token generation failed: ' + error.message
+      error: 'Token generation failed'
     });
   }
 });
@@ -184,38 +195,66 @@ app.post('/api/business-request', async (req, res) => {
     const { request, context } = req.body;
     console.log(`Processing business request: "${request}"`);
 
-    // Try AI-powered database query first for data-related requests
+    // Execute AI operations in parallel for better performance
+    const operations = [
+      // Database operation
+      async () => {
+        const ollamaClient = require('../slm/ollama-client');
+        return await dbAdapter.processBusinessRequest(request, req.user, ollamaClient);
+      },
+      // Context enrichment
+      async () => contextManager.enrichContext(context, req.user),
+      // Health checks for monitoring
+      async () => {
+        const ollamaClient = require('../slm/ollama-client');
+        return await ollamaClient.checkHealth();
+      }
+    ];
+
+    console.log('Executing AI operations in parallel...');
+    const results = await parallelProcessor.executeAIOperations(operations);
+
+    // Process results
     let dbResult = null;
-    let ollamaClient = null;
+    let enrichedContext = null;
+    let ollamaHealth = null;
 
-    try {
-      // Get Ollama client for AI processing
-      ollamaClient = require('../slm/ollama-client');
+    for (const result of results) {
+      if (result.success) {
+        if (result.result && result.result.query_type) {
+          // This is the database result
+          dbResult = result.result;
+          console.log('DB Result received:', JSON.stringify(dbResult, null, 2));
 
-      dbResult = await dbAdapter.processBusinessRequest(request, req.user, ollamaClient);
-      console.log('DB Result received:', JSON.stringify(dbResult, null, 2));
-
-      if (dbResult && dbResult.success) {
-        console.log(`AI Database query successful: ${dbResult.query_type}, ${dbResult.record_count} records`);
-        if (dbResult.ai_powered) {
-          console.log(`AI-powered processing with confidence: ${dbResult.confidence}`);
+          if (dbResult.success) {
+            console.log(`AI Database query successful: ${dbResult.query_type}, ${dbResult.record_count} records`);
+            if (dbResult.ai_powered) {
+              console.log(`AI-powered processing with confidence: ${dbResult.confidence}`);
+            }
+          }
+        } else if (result.result && result.result.user) {
+          // This is the enriched context
+          enrichedContext = result.result;
+        } else if (result.result && result.result.healthy !== undefined) {
+          // This is the health check
+          ollamaHealth = result.result;
         }
       } else {
-        console.log('Database query failed or returned no success flag');
+        console.warn(`Parallel operation failed: ${result.error}`);
       }
-    } catch (dbError) {
-      console.log('AI Database query failed:', dbError.message);
-      console.error('Database error stack:', dbError.stack);
     }
 
-    // Build context and prompt with fallback
-    let enrichedContext, promptResult;
+    // Fallback for context if parallel operation failed
+    if (!enrichedContext) {
+      enrichedContext = { ...context, user: req.user };
+    }
+
+    // Build prompt (can be done after parallel operations)
+    let promptResult;
     try {
-      enrichedContext = await contextManager.enrichContext(context, req.user);
       promptResult = await promptBuilder.buildPrompt(request, enrichedContext);
     } catch (ragError) {
       console.log('RAG system not available, using simple context');
-      enrichedContext = { ...context, user: req.user };
       promptResult = {
         prompt: `Business Query: ${request}\nContext: ${JSON.stringify(enrichedContext)}`,
         metadata: { template_used: 'fallback', documents_retrieved: 0 },
@@ -424,9 +463,53 @@ async function initializeServices() {
   }
 }
 
+// Error handling middleware (must be last)
+app.use(errorHandler.expressErrorHandler());
+
+// Resource monitoring and health endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    const health = await resourceMonitor.getHealthStatus();
+    const statusCode = health.status === 'healthy' ? 200 :
+                      health.status === 'degraded' ? 200 : 503;
+    res.status(statusCode).json(health);
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Health check failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Resource metrics endpoint
+app.get('/api/metrics', (req, res) => {
+  try {
+    const metrics = resourceMonitor.getMetrics();
+    res.json({
+      success: true,
+      metrics,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve metrics',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.listen(PORT, async () => {
   console.log(`Orchestration service running on port ${PORT}`);
+
+  // Initialize resource monitoring
+  resourceMonitor.initialize();
+
+  // Initialize other services
   await initializeServices();
+
+  console.log('🚀 SLM Business Service Layer ready with enhanced security and monitoring');
 });
 
 module.exports = app;

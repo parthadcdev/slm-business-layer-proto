@@ -7,6 +7,7 @@
 const { Pool } = require('pg');
 const intentClassifier = require('../ai/intent-classifier');
 const sqlGenerator = require('../ai/sql-generator');
+const securityConfig = require('../config/security-config');
 
 class AIDatabaseAdapter {
   constructor() {
@@ -18,31 +19,38 @@ class AIDatabaseAdapter {
 
   async initialize() {
     try {
+      const dbConfig = securityConfig.get('database');
+
       this.pool = new Pool({
         user: process.env.POSTGRES_USER || 'app_user',
         host: process.env.POSTGRES_HOST || 'localhost',
         database: process.env.POSTGRES_DB || 'business_app',
         password: process.env.POSTGRES_PASSWORD || 'app_password',
         port: process.env.POSTGRES_PORT || 5432,
-        max: 20,
+        max: dbConfig.maxConnections || 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: dbConfig.connectionTimeoutMs || 5000,
+        ssl: dbConfig.enableSSL ? { rejectUnauthorized: false } : false
       });
 
-      console.log('Connecting to PostgreSQL with config:', {
-        user: process.env.POSTGRES_USER || 'app_user',
-        host: process.env.POSTGRES_HOST || 'localhost',
-        database: process.env.POSTGRES_DB || 'business_app',
-        port: process.env.POSTGRES_PORT || 5432,
-        password: '***'
-      });
+      // Only log connection info in development, never credentials
+      if (securityConfig.isDevelopment()) {
+        console.log('Connecting to PostgreSQL:', {
+          host: process.env.POSTGRES_HOST || 'localhost',
+          database: process.env.POSTGRES_DB || 'business_app',
+          port: process.env.POSTGRES_PORT || 5432,
+          ssl: dbConfig.enableSSL
+        });
+      }
 
       // Test connection
       await this.pool.query('SELECT NOW()');
       this.initialized = true;
       console.log('AI Database adapter initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize AI Database adapter:', error);
+      const sanitizedError = securityConfig.sanitizeForLogging ?
+        securityConfig.sanitizeForLogging(error.message) : error.message;
+      console.error('Failed to initialize AI Database adapter:', sanitizedError);
       throw new Error('Database initialization failed');
     }
   }

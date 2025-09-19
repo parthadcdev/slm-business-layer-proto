@@ -4,13 +4,22 @@
  * @author Partha Chandramohan
  * @description AI-powered SQL generation with validation and safety measures
  */
+const LRUCache = require('../utils/lru-cache');
+const securityConfig = require('../config/security-config');
+const sqlValidator = require('../security/sql-validator');
 
 class SQLGenerator {
   constructor() {
     this.schema = this.loadDatabaseSchema();
-    this.queryCache = new Map();
-    this.maxCacheSize = 500;
+    const cacheConfig = securityConfig.get('cache');
+    this.queryCache = new LRUCache(
+      cacheConfig.maxSize || 500,
+      cacheConfig.defaultTTL || 10 * 60 * 1000 // 10 minutes for SQL queries
+    );
     this.allowedOperations = ['SELECT']; // Only read operations for safety
+
+    // Configure SQL validator with allowed tables
+    sqlValidator.setAllowedTables(Object.keys(this.schema.tables));
   }
 
   loadDatabaseSchema() {
@@ -108,7 +117,7 @@ class SQLGenerator {
       const validatedSQL = this.validateSQL(sql);
 
       // Cache the result
-      this.cacheQuery(cacheKey, validatedSQL);
+      this.queryCache.set(cacheKey, validatedSQL);
 
       return validatedSQL;
     } catch (error) {
@@ -252,30 +261,29 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
   }
 
   validateSQL(sql) {
-    // Basic SQL injection protection
-    const dangerous = ['DROP', 'DELETE', 'INSERT', 'UPDATE', 'CREATE', 'ALTER', 'TRUNCATE', '--', ';--', '/*', '*/', 'xp_', 'sp_'];
-    const sqlUpper = sql.toUpperCase();
+    // Use the advanced SQL validator
+    const validationResult = sqlValidator.validate(sql, {
+      source: 'ai-generated',
+      allowedTables: Object.keys(this.schema.tables)
+    });
 
-    for (const danger of dangerous) {
-      if (sqlUpper.includes(danger)) {
-        throw new Error(`Potentially dangerous SQL detected: ${danger}`);
-      }
+    if (!validationResult.valid) {
+      const errorMessage = validationResult.errors.join('; ');
+      console.error('SQL validation failed:', errorMessage);
+      throw new Error(`SQL validation failed: ${errorMessage}`);
     }
 
-    // Ensure it starts with SELECT
-    if (!sqlUpper.trim().startsWith('SELECT')) {
-      throw new Error('Only SELECT statements are allowed');
+    // Log warnings if any
+    if (validationResult.warnings.length > 0) {
+      console.warn('SQL validation warnings:', validationResult.warnings.join('; '));
     }
 
-    // Basic syntax validation
-    if (!sql.includes('FROM')) {
-      throw new Error('SQL must include FROM clause');
+    // Log query complexity for monitoring
+    if (validationResult.metadata.complexity !== 'simple') {
+      console.log(`Generated ${validationResult.metadata.complexity} SQL query with ${validationResult.metadata.joinCount} joins`);
     }
 
-    // Validate table names against schema
-    this.validateTableNames(sql);
-
-    return sql;
+    return validationResult.sql;
   }
 
   validateTableNames(sql) {
@@ -473,24 +481,12 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
     });
   }
 
-  cacheQuery(key, sql) {
-    if (this.queryCache.size >= this.maxCacheSize) {
-      const oldestKey = this.queryCache.keys().next().value;
-      this.queryCache.delete(oldestKey);
-    }
-
-    this.queryCache.set(key, sql);
-  }
-
   clearCache() {
     this.queryCache.clear();
   }
 
   getCacheStats() {
-    return {
-      size: this.queryCache.size,
-      maxSize: this.maxCacheSize
-    };
+    return this.queryCache.getStats();
   }
 }
 

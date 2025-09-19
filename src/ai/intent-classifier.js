@@ -4,12 +4,16 @@
  * @author Partha Chandramohan
  * @description AI-powered intent understanding with caching and fallback mechanisms
  */
+const LRUCache = require('../utils/lru-cache');
+const securityConfig = require('../config/security-config');
 
 class IntentClassifier {
   constructor() {
-    this.cache = new Map();
-    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
-    this.maxCacheSize = 1000;
+    const cacheConfig = securityConfig.get('cache');
+    this.cache = new LRUCache(
+      cacheConfig.maxSize || 1000,
+      cacheConfig.defaultTTL || 5 * 60 * 1000 // 5 minutes
+    );
   }
 
   async classifyIntent(userRequest, ollamaClient) {
@@ -17,9 +21,9 @@ class IntentClassifier {
     const cacheKey = this.generateCacheKey(userRequest);
     const cached = this.cache.get(cacheKey);
 
-    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+    if (cached) {
       console.log('Intent classification cache hit');
-      return cached.intent;
+      return cached;
     }
 
     // Fast-fail: Check if Ollama has models before attempting SLM classification
@@ -34,7 +38,7 @@ class IntentClassifier {
       const intent = await this.classifyWithSLM(userRequest, ollamaClient);
 
       // Cache the result
-      this.cacheIntent(cacheKey, intent);
+      this.cache.set(cacheKey, intent);
 
       return intent;
     } catch (error) {
@@ -289,29 +293,12 @@ Examples:
     return userRequest.toLowerCase().trim().replace(/\s+/g, ' ');
   }
 
-  cacheIntent(key, intent) {
-    // Clean cache if it's getting too large
-    if (this.cache.size >= this.maxCacheSize) {
-      const oldestKey = this.cache.keys().next().value;
-      this.cache.delete(oldestKey);
-    }
-
-    this.cache.set(key, {
-      intent,
-      timestamp: Date.now()
-    });
-  }
-
   clearCache() {
     this.cache.clear();
   }
 
   getCacheStats() {
-    return {
-      size: this.cache.size,
-      maxSize: this.maxCacheSize,
-      hitRate: this.cacheHits / (this.cacheHits + this.cacheMisses) || 0
-    };
+    return this.cache.getStats();
   }
 }
 

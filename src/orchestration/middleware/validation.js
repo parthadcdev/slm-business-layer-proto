@@ -1,75 +1,53 @@
-// Input validation middleware
-const validator = require('validator');
-const xss = require('xss');
+// Enhanced input validation middleware using comprehensive security validator
+const inputValidator = require('../../security/input-validator');
+const errorHandler = require('../../utils/error-handler');
 
 const validationMiddleware = (req, res, next) => {
   try {
-    // Validate and sanitize request body
-    if (req.body) {
-      req.body = sanitizeObject(req.body);
+    // Validate business request
+    if (req.body.request) {
+      const requestValidation = inputValidator.validateBusinessRequest(req.body.request);
+      if (!requestValidation.valid) {
+        const error = errorHandler.createError(
+          `Request validation failed: ${requestValidation.errors.join('; ')}`,
+          errorHandler.errorCategories.VALIDATION,
+          errorHandler.severityLevels.MEDIUM,
+          { validationErrors: requestValidation.errors }
+        );
+        const { response, statusCode } = errorHandler.handleError(error);
+        return res.status(statusCode).json(response);
+      }
+      req.body.request = requestValidation.sanitized;
     }
 
-    // Validate specific endpoints
-    if (req.path === '/business-request') {
-      if (!validateBusinessRequest(req.body)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid request format'
-        });
+    // Validate user context
+    if (req.body.context !== undefined) {
+      const contextValidation = inputValidator.validateUserContext(req.body.context);
+      if (!contextValidation.valid) {
+        const error = errorHandler.createError(
+          `Context validation failed: ${contextValidation.errors.join('; ')}`,
+          errorHandler.errorCategories.VALIDATION,
+          errorHandler.severityLevels.MEDIUM,
+          { validationErrors: contextValidation.errors }
+        );
+        const { response, statusCode } = errorHandler.handleError(error);
+        return res.status(statusCode).json(response);
       }
+      req.body.context = contextValidation.sanitized;
     }
 
     next();
   } catch (error) {
-    console.error('Validation error:', error);
-    return res.status(400).json({
-      success: false,
-      error: 'Request validation failed'
-    });
+    console.error('Validation middleware error:', error);
+    const validationError = errorHandler.createError(
+      'Request validation failed',
+      errorHandler.errorCategories.VALIDATION,
+      errorHandler.severityLevels.HIGH,
+      { originalError: error.message }
+    );
+    const { response, statusCode } = errorHandler.handleError(validationError);
+    return res.status(statusCode).json(response);
   }
 };
-
-function sanitizeObject(obj) {
-  if (typeof obj === 'string') {
-    return xss(validator.escape(obj));
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeObject);
-  }
-
-  if (obj && typeof obj === 'object') {
-    const sanitized = {};
-    for (const [key, value] of Object.entries(obj)) {
-      sanitized[key] = sanitizeObject(value);
-    }
-    return sanitized;
-  }
-
-  return obj;
-}
-
-function validateBusinessRequest(body) {
-  if (!body || typeof body !== 'object') {
-    return false;
-  }
-
-  // Check required fields
-  if (!body.request || typeof body.request !== 'string') {
-    return false;
-  }
-
-  // Validate request length
-  if (body.request.length > 10000) {
-    return false;
-  }
-
-  // Validate context if provided
-  if (body.context && typeof body.context !== 'object') {
-    return false;
-  }
-
-  return true;
-}
 
 module.exports = validationMiddleware;

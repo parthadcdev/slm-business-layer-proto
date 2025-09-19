@@ -1,5 +1,6 @@
 // Authentication middleware
 const jwt = require('jsonwebtoken');
+const securityConfig = require('../../config/security-config');
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -12,18 +13,36 @@ const authMiddleware = (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
+    const jwtConfig = securityConfig.get('jwt');
+    const decoded = jwt.verify(token, jwtConfig.secret, {
+      algorithms: [jwtConfig.algorithm],
+      issuer: jwtConfig.issuer,
+      audience: jwtConfig.audience,
+      clockTolerance: jwtConfig.clockTolerance || 30
+    });
+
     req.user = decoded;
 
-    // Log authentication event
-    console.log(`Authenticated request from user: ${decoded.id} (${decoded.role})`);
+    // Log authentication event with sanitized data
+    const auditConfig = securityConfig.get('audit');
+    if (auditConfig.enabled) {
+      console.log(`Authenticated request from user: ${decoded.id} (${decoded.role})`);
+    }
 
     next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
+    console.error('Authentication error:', securityConfig.sanitizeForLogging ? securityConfig.sanitizeForLogging(error.message) : error.message);
+
+    let errorMessage = 'Invalid token';
+    if (error.name === 'TokenExpiredError') {
+      errorMessage = 'Token expired';
+    } else if (error.name === 'JsonWebTokenError') {
+      errorMessage = 'Invalid token format';
+    }
+
     return res.status(401).json({
       success: false,
-      error: 'Invalid token'
+      error: errorMessage
     });
   }
 };
