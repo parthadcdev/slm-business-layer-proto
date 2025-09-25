@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 # Service configuration
 ORCHESTRATION_PROCESS="node src/orchestration/app.js"
 ORCHESTRATION_PORT=8001
-DOCKER_COMPOSE_FILE="podman-compose.yml"
+COMPOSE_FILE="docker-compose.yml"
 PROJECT_NAME="slm-business-layer-proto"
 
 # Function to print colored output
@@ -161,18 +161,18 @@ check_service_health() {
     return 1
 }
 
-# Function to stop Docker services
-stop_docker_services() {
-    print_section "Stopping Docker Services"
+# Function to stop Podman services
+stop_podman_services() {
+    print_section "Stopping Podman Services"
 
     check_podman
 
-    if podman-compose -f "$DOCKER_COMPOSE_FILE" ps -q | grep -q .; then
-        print_status "Stopping Docker containers..."
-        podman-compose -f "$DOCKER_COMPOSE_FILE" down
-        print_status "Docker services stopped ✓"
+    if podman-compose -f "$COMPOSE_FILE" ps -q | grep -q .; then
+        print_status "Stopping Podman containers..."
+        podman-compose -f "$COMPOSE_FILE" down
+        print_status "Podman services stopped ✓"
     else
-        print_warning "No Docker services running"
+        print_warning "No Podman services running"
     fi
 }
 
@@ -203,14 +203,14 @@ stop_orchestration() {
     fi
 }
 
-# Function to start Docker services
-start_docker_services() {
-    print_section "Starting Docker Services"
+# Function to start Podman services
+start_podman_services() {
+    print_section "Starting Podman Services"
 
     check_podman
 
-    print_status "Starting core Docker services..."
-    podman-compose -f "$DOCKER_COMPOSE_FILE" up -d postgres chromadb redis
+    print_status "Starting core Podman services..."
+    podman-compose -f "$COMPOSE_FILE" up -d postgres chromadb redis
 
     print_status "Waiting for services to initialize..."
     sleep 10
@@ -221,7 +221,7 @@ start_docker_services() {
     check_service_health "Ollama" "http://localhost:11434/api/tags" || true
     check_service_health "Redis" "redis://localhost:6379" || true
 
-    print_status "Docker services started ✓"
+    print_status "Podman services started ✓"
 }
 
 # Function to start orchestration service
@@ -266,12 +266,12 @@ start_orchestration() {
 show_status() {
     print_header "Service Status"
 
-    # Docker services
-    print_section "Docker Services"
-    if docker info >/dev/null 2>&1; then
-        podman-compose -f "$DOCKER_COMPOSE_FILE" ps
+    # Podman services
+    print_section "Podman Services"
+    if podman info >/dev/null 2>&1; then
+        podman-compose -f "$COMPOSE_FILE" ps
     else
-        print_error "Docker is not running"
+        print_error "Podman is not running"
     fi
 
     echo
@@ -398,10 +398,10 @@ cleanup() {
         print_status "Cleaned old log files"
     fi
 
-    # Clean Docker resources
-    print_status "Cleaning Docker resources..."
-    docker system prune -f >/dev/null 2>&1 || true
-    print_status "Docker cleanup completed"
+    # Clean Podman resources
+    print_status "Cleaning Podman resources..."
+    podman system prune -f >/dev/null 2>&1 || true
+    print_status "Podman cleanup completed"
 }
 
 # Main execution
@@ -410,7 +410,7 @@ main() {
         "start")
             print_header "Starting All Services"
             ensure_logs_directory
-            start_docker_services
+            start_podman_services
             echo
             start_local_ollama
             echo
@@ -427,7 +427,7 @@ main() {
             echo
             stop_local_ollama
             echo
-            stop_docker_services
+            stop_podman_services
             echo
             print_status "All services stopped successfully!"
             ;;
@@ -437,11 +437,11 @@ main() {
             echo
             stop_local_ollama
             echo
-            stop_docker_services
+            stop_podman_services
             echo
             sleep 3
             ensure_logs_directory
-            start_docker_services
+            start_podman_services
             echo
             start_local_ollama
             echo
@@ -461,21 +461,21 @@ main() {
         "cleanup")
             cleanup
             ;;
-        "docker-only")
+        "podman-only")
             case "${2:-}" in
                 "start")
-                    start_docker_services
+                    start_podman_services
                     ;;
                 "stop")
-                    stop_docker_services
+                    stop_podman_services
                     ;;
                 "restart")
-                    stop_docker_services
+                    stop_podman_services
                     sleep 3
-                    start_docker_services
+                    start_podman_services
                     ;;
                 *)
-                    print_error "Usage: $0 docker-only [start|stop|restart]"
+                    print_error "Usage: $0 podman-only [start|stop|restart]"
                     exit 1
                     ;;
             esac
@@ -543,14 +543,14 @@ SLM Business Service Layer - Service Management Script
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
-  start                 Start all services (Docker + Orchestration)
+  start                 Start all services (Podman + Orchestration)
   stop                  Stop all services
   restart               Restart all services
   status                Show status of all services
   test                  Run quick health tests
-  cleanup               Clean up logs and Docker resources
+  cleanup               Clean up logs and Podman resources
 
-  docker-only [start|stop|restart]        Manage only Docker services
+  podman-only [start|stop|restart]        Manage only Podman services
   orchestration-only [start|stop|restart] Manage only orchestration service
   ollama-only [start|stop|restart|status] Manage only local Ollama service
 
@@ -561,7 +561,7 @@ Examples:
   $0 restart            # Restart everything
   $0 status             # Check service status
   $0 test               # Run health tests
-  $0 docker-only start  # Start only Docker services
+  $0 podman-only start  # Start only Podman services
   $0 ollama-only status # Check Ollama status and models
 
 Service Ports:

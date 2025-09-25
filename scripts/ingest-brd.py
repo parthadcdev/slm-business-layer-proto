@@ -362,7 +362,7 @@ def main():
 
     print("\n✅ BRD ingestion completed successfully!")
     print("\nNext steps to use the BRD in your SLM:")
-    print("1. Start ChromaDB service: docker-compose -f docker-compose.simple.yml up chromadb")
+    print("1. Start ChromaDB service: podman-compose -f docker-compose.yml up chromadb")
     print("2. Start the orchestration service: npm run dev")
     print("3. Test business queries via API: POST /api/business-request")
     print("4. Example query: 'Show me the business rules for order processing'")

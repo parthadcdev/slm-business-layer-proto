@@ -413,9 +413,9 @@ clean_project() {
         log_info "Cleaned old backups ✓"
     fi
 
-    # Clean Docker resources
-    log_info "Cleaning Docker resources..."
-    docker system prune -f >/dev/null 2>&1 || true
+    # Clean Podman resources
+    log_info "Cleaning Podman resources..."
+    podman system prune -f >/dev/null 2>&1 || true
 
     # Clean node_modules if requested
     read -p "Clean node_modules? This will require reinstall. (y/N): " -n 1 -r
