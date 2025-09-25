@@ -7,6 +7,8 @@
 const LRUCache = require('../utils/lru-cache');
 const securityConfig = require('../config/security-config');
 const sqlValidator = require('../security/sql-validator');
+const sqlIntentValidator = require('./sql-intent-validator');
+const modelConfig = require('../config/model-config');
 
 class SQLGenerator {
   constructor() {
@@ -20,6 +22,11 @@ class SQLGenerator {
 
     // Configure SQL validator with allowed tables
     sqlValidator.setAllowedTables(Object.keys(this.schema.tables));
+
+    // Initialize model configuration
+    this.modelConfig = modelConfig;
+    this.lastUsedPrompt = null;
+    this.lastUsedModel = null;
   }
 
   loadDatabaseSchema() {
@@ -99,9 +106,9 @@ class SQLGenerator {
     };
   }
 
-  async generateSQL(intent, ollamaClient) {
+  async generateSQL(intent, schemaContext, userRole, ollamaClient, modelOverride = null) {
     // Check cache first
-    const cacheKey = this.generateCacheKey(intent);
+    const cacheKey = this.generateCacheKey(intent, schemaContext, userRole);
     const cached = this.queryCache.get(cacheKey);
 
     if (cached) {
@@ -110,31 +117,464 @@ class SQLGenerator {
     }
 
     try {
-      // Use SLM for SQL generation
-      const sql = await this.generateWithSLM(intent, ollamaClient);
+      // Apply model override if provided
+      if (modelOverride) {
+        this.modelConfig.setModelConfig(modelOverride.provider, modelOverride.model, modelOverride.options);
+      }
 
-      // Validate the generated SQL
-      const validatedSQL = this.validateSQL(sql);
+      // Use verified SQL generation with regeneration loop
+      const result = await this.generateVerifiedSQL(intent, schemaContext, userRole, ollamaClient);
 
       // Cache the result
-      this.queryCache.set(cacheKey, validatedSQL);
+      this.queryCache.set(cacheKey, result.sql);
 
-      return validatedSQL;
+      return result;
     } catch (error) {
-      console.log('SLM SQL generation failed, using template fallback');
-      return this.generateWithTemplate(intent);
+      console.log('Verified SQL generation failed, using template fallback:', error.message);
+      const fallbackSql = this.generateWithTemplate(intent);
+      return {
+        sql: fallbackSql,
+        prompt: 'Template-based fallback (no LM prompt used)',
+        model: 'template-fallback',
+        method: 'template'
+      };
     }
+  }
+
+  async generateVerifiedSQL(intent, schemaContext, userRole, ollamaClient) {
+    const maxAttempts = 3;
+    let bestSQL = null;
+    let bestScore = 0;
+    let lastValidationResult = null;
+    let usedPrompt = null;
+    let usedModel = null;
+
+    console.log(`[SQL-Verification] Starting verified SQL generation for intent: ${intent.intent} ${intent.entity}`);
+    const currentConfig = this.modelConfig.getCurrentConfig();
+    console.log(`[SQL-Verification] Using model: ${currentConfig.provider}/${currentConfig.model}`);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`[SQL-Verification] Attempt ${attempt}/${maxAttempts}`);
+
+      try {
+        // Generate SQL using appropriate method
+        let sql;
+        let prompt;
+        if (attempt === 1) {
+          // First attempt: try SLM generation
+          const result = schemaContext && schemaContext.results && schemaContext.results.length > 0 ?
+            await this.generateWithSchemaContext(intent, schemaContext, userRole, ollamaClient) :
+            await this.generateWithSLM(intent, ollamaClient);
+          sql = result.sql || result;
+          prompt = result.prompt;
+          usedPrompt = prompt;
+          usedModel = this.modelConfig.getDisplayConfig();
+        } else {
+          // Subsequent attempts: improve based on validation feedback
+          const result = await this.generateImprovedSQL(intent, bestSQL, lastValidationResult, ollamaClient);
+          sql = result.sql || result;
+          prompt = result.prompt;
+        }
+
+        // Validate basic SQL structure
+        const validatedSQL = this.validateSQL(sql);
+
+        // Verify SQL matches intent
+        console.log(`[SQL-Verification] Validating SQL-intent alignment for attempt ${attempt}`);
+        const intentValidation = await sqlIntentValidator.validateSQLMatchesIntent(
+          intent, validatedSQL, ollamaClient, this.schema, intent.originalRequest
+        );
+
+        console.log(`[SQL-Verification] Attempt ${attempt} validation score: ${intentValidation.score.toFixed(2)}`);
+
+        if (intentValidation.issues.length > 0) {
+          console.log(`[SQL-Verification] Issues found:`, intentValidation.issues);
+        }
+
+        // Keep track of best attempt
+        if (intentValidation.score > bestScore) {
+          bestSQL = validatedSQL;
+          bestScore = intentValidation.score;
+          lastValidationResult = intentValidation;
+        }
+
+        // If validation passes, return this SQL with metadata
+        if (intentValidation.isValid) {
+          console.log(`[SQL-Verification] SQL validated successfully on attempt ${attempt}`);
+          this.lastUsedPrompt = usedPrompt;
+          this.lastUsedModel = usedModel;
+          return {
+            sql: validatedSQL,
+            prompt: usedPrompt,
+            model: usedModel,
+            method: 'llm-verified',
+            attempts: attempt,
+            validationScore: intentValidation.score
+          };
+        }
+
+      } catch (error) {
+        console.log(`[SQL-Verification] Attempt ${attempt} failed:`, error.message);
+        lastValidationResult = {
+          isValid: false,
+          score: 0,
+          issues: [error.message],
+          recommendations: ['Try template fallback']
+        };
+      }
+    }
+
+    // If no attempt fully succeeded, use best attempt or fallback
+    if (bestSQL && bestScore >= 0.5) {
+      console.log(`[SQL-Verification] Using best attempt with score ${bestScore.toFixed(2)}`);
+      this.lastUsedPrompt = usedPrompt;
+      this.lastUsedModel = usedModel;
+      return {
+        sql: bestSQL,
+        prompt: usedPrompt,
+        model: usedModel,
+        method: 'llm-partial',
+        attempts: maxAttempts,
+        validationScore: bestScore
+      };
+    } else {
+      console.log(`[SQL-Verification] All attempts failed, falling back to template generation`);
+      throw new Error('SQL verification failed after maximum attempts');
+    }
+  }
+
+  async generateImprovedSQL(intent, previousSQL, validationResult, ollamaClient) {
+    const improvementPrompt = sqlIntentValidator.generateSQLImprovementPrompt(
+      intent, previousSQL, validationResult
+    );
+
+    console.log(`[SQL-Verification] Generating improved SQL based on validation feedback`);
+
+    const response = await this.generateLLMResponse(improvementPrompt, ollamaClient);
+    const sql = this.extractSQL(response.response || response);
+
+    return {
+      sql: sql,
+      prompt: improvementPrompt
+    };
   }
 
   async generateWithSLM(intent, ollamaClient) {
     const prompt = this.buildSQLGenerationPrompt(intent);
 
-    const response = await ollamaClient.generateResponse(prompt, {
-      temperature: 0.1, // Low temperature for consistent SQL
-      max_tokens: 500
-    });
+    const response = await this.generateLLMResponse(prompt, ollamaClient);
+    const sql = this.extractSQL(response.response || response);
 
-    return this.extractSQL(response.response || response);
+    return {
+      sql: sql,
+      prompt: prompt
+    };
+  }
+
+  async generateWithSchemaContext(intent, schemaContext, userRole, ollamaClient) {
+    try {
+      // Extract table and column information from schema context
+      const tableInfo = this.parseSchemaContext(schemaContext);
+
+      // Apply RBAC column filtering
+      const allowedColumns = this.filterColumnsByRole(tableInfo.columns, userRole);
+
+      // Generate dynamic SQL using schema intelligence
+      const sql = this.buildDynamicSQL(intent, tableInfo, allowedColumns, userRole);
+
+      console.log(`[SQLGenerator] Schema-context generation for ${intent.entity}: ${tableInfo.table}`);
+      return {
+        sql: sql,
+        prompt: 'Schema-context based generation (no LM prompt used)'
+      };
+    } catch (error) {
+      console.log('[SQLGenerator] Schema-context generation failed, falling back to SLM');
+      return await this.generateWithSLM(intent, ollamaClient);
+    }
+  }
+
+  parseSchemaContext(schemaContext) {
+    if (!schemaContext.results || schemaContext.results.length === 0) {
+      throw new Error('No schema context available');
+    }
+
+    const topResult = schemaContext.results[0];
+    const metadata = topResult.metadata || {};
+
+    // Extract table name
+    let tableName = metadata.table;
+    if (!tableName) {
+      const tableMatch = topResult.document.match(/CREATE TABLE (\w+)/i);
+      tableName = tableMatch ? tableMatch[1] : null;
+    }
+
+    if (!tableName) {
+      throw new Error('Could not extract table name from schema context');
+    }
+
+    // Extract columns from schema document
+    const columns = this.extractColumnsFromSchema(topResult.document, tableName);
+
+    // Get join information from hardcoded schema (for now)
+    const schemaTable = this.schema.tables[tableName];
+    const joins = schemaTable ? schemaTable.joins : {};
+
+    return {
+      table: tableName,
+      columns: columns,
+      joins: joins,
+      access: metadata.access || 'public',
+      description: metadata.description || ''
+    };
+  }
+
+  extractColumnsFromSchema(schemaDocument, tableName) {
+    // Extract column definitions from CREATE TABLE statement
+    const lines = schemaDocument.split('\n');
+    const columns = [];
+    let inTableDef = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (trimmed.toUpperCase().includes(`CREATE TABLE ${tableName.toUpperCase()}`)) {
+        inTableDef = true;
+        continue;
+      }
+
+      if (inTableDef) {
+        if (trimmed === ');' || trimmed === ')') {
+          break;
+        }
+
+        // Extract column name (first word after whitespace)
+        const columnMatch = trimmed.match(/^(\w+)\s+/);
+        if (columnMatch && !trimmed.toUpperCase().includes('CONSTRAINT')) {
+          columns.push(columnMatch[1]);
+        }
+      }
+    }
+
+    // Fallback to hardcoded schema if extraction fails
+    if (columns.length === 0) {
+      const schemaTable = this.schema.tables[tableName];
+      return schemaTable ? schemaTable.columns : [];
+    }
+
+    return columns;
+  }
+
+  filterColumnsByRole(columns, userRole) {
+    // Define sensitive columns that require higher access levels
+    const sensitiveColumns = {
+      'customers': ['email', 'phone', 'address'],
+      'orders': ['payment_details', 'credit_card_info'],
+      'suppliers': ['contact_details', 'pricing_terms']
+    };
+
+    switch (userRole) {
+      case 'admin':
+        return columns; // Admin can see everything
+      case 'manager':
+        return columns.filter(col => {
+          // Managers can see most columns except highly sensitive ones
+          return !['credit_card_info', 'ssn', 'tax_id'].includes(col.toLowerCase());
+        });
+      case 'employee':
+      default:
+        return columns.filter(col => {
+          const colLower = col.toLowerCase();
+          return !['email', 'phone', 'address', 'payment_details', 'credit_card_info',
+                   'contact_details', 'pricing_terms', 'cost_price', 'ssn', 'tax_id'].includes(colLower);
+        });
+    }
+  }
+
+  buildDynamicSQL(intent, tableInfo, allowedColumns, userRole) {
+    const { table, joins } = tableInfo;
+
+    // Build SELECT clause with allowed columns
+    const selectColumns = this.buildSelectClause(table, allowedColumns, intent);
+
+    // Build FROM clause with alias for orders table when customer filtering
+    let fromClause = table;
+    if (table === 'orders' && intent.queryParams?.customer_name) {
+      fromClause = `${table} o`;
+    }
+
+    // Build JOIN clauses if needed
+    const joinClauses = this.buildJoinClauses(table, joins, intent, userRole);
+    if (joinClauses.length > 0) {
+      fromClause += ' ' + joinClauses.join(' ');
+    }
+
+    // Build WHERE clause
+    const whereClause = this.buildDynamicWhereClause(intent, table, userRole);
+
+    // Build ORDER BY clause
+    const orderClause = this.buildOrderClause(intent, table);
+
+    // Build LIMIT clause
+    const limitClause = intent.queryParams?.limit || intent.limit ?
+      `LIMIT ${intent.queryParams?.limit || intent.limit}` : '';
+
+    // Assemble the query
+    let sql = `SELECT ${selectColumns} FROM ${fromClause}`;
+
+    if (whereClause) {
+      sql += ` WHERE ${whereClause}`;
+    }
+
+    if (orderClause) {
+      sql += ` ORDER BY ${orderClause}`;
+    }
+
+    if (limitClause) {
+      sql += ` ${limitClause}`;
+    }
+
+    return sql + ';';
+  }
+
+  buildSelectClause(table, allowedColumns, intent) {
+    if (intent.intent === 'count') {
+      return 'COUNT(*) as total';
+    }
+
+    // For orders table with customer name filtering, include customer name
+    if (table === 'orders' && intent.queryParams?.customer_name) {
+      const orderColumns = ['o.order_number', 'o.order_date', 'o.status', 'o.total_amount'];
+      const customerName = "CONCAT(c.first_name, ' ', c.last_name) AS customer_name";
+      return `${orderColumns.join(', ')}, ${customerName}`;
+    }
+
+    // For categories, show user-friendly columns
+    if (table === 'categories') {
+      const categoryColumns = allowedColumns.filter(col =>
+        ['category_name', 'category_code', 'is_active'].includes(col)
+      );
+      return categoryColumns.length > 0 ? categoryColumns.join(', ') : 'category_name, category_code';
+    }
+
+    // For other tables, select appropriate columns based on intent
+    if (allowedColumns.length <= 5) {
+      return allowedColumns.join(', ');
+    }
+
+    // Select key columns for larger tables
+    const keyColumns = allowedColumns.filter(col => {
+      const colLower = col.toLowerCase();
+      return colLower.includes('name') || colLower.includes('code') ||
+             colLower.includes('status') || colLower.includes('id');
+    }).slice(0, 5);
+
+    return keyColumns.length > 0 ? keyColumns.join(', ') : allowedColumns.slice(0, 5).join(', ');
+  }
+
+  buildJoinClauses(table, joins, intent, userRole) {
+    const joinClauses = [];
+
+    // Check if we need to join customers table for customer_name filtering
+    const needsCustomerJoin = intent.queryParams?.customer_name && table === 'orders';
+
+    if (needsCustomerJoin) {
+      const tableAlias = table === 'orders' ? 'o' : table;
+      joinClauses.push(`JOIN customers c ON ${tableAlias}.customer_id = c.customer_id`);
+    }
+
+    // Add joins based on intent and available relationships
+    if (intent.intent === 'analyze' || intent.intent === 'list') {
+      for (const [joinTable, joinColumn] of Object.entries(joins)) {
+        // Skip customer join if we already added it above
+        if (joinTable === 'customers' && needsCustomerJoin) {
+          continue;
+        }
+
+        // Only add joins for accessible tables
+        if (this.isTableAccessible(joinTable, userRole)) {
+          const alias = joinTable === 'customers' ? 'c' : joinTable.charAt(0);
+          joinClauses.push(`LEFT JOIN ${joinTable} ${alias} ON ${table}.${joinColumn} = ${alias}.${joinColumn}`);
+        }
+      }
+    }
+
+    return joinClauses;
+  }
+
+  buildDynamicWhereClause(intent, table, userRole) {
+    const conditions = [];
+
+    // Apply query parameters from intent
+    if (intent.queryParams) {
+      for (const [key, value] of Object.entries(intent.queryParams)) {
+        if (key === 'status' && typeof value === 'string') {
+          conditions.push(`${table}.status = '${value}'`);
+        } else if (key === 'is_active' && typeof value === 'boolean') {
+          conditions.push(`${table}.is_active = ${value}`);
+        } else if (key === 'customer_name' && typeof value === 'string') {
+          // Handle customer name filtering - need to join with customers table
+          if (table === 'orders') {
+            conditions.push(`(c.first_name ILIKE '%${value}%' OR c.last_name ILIKE '%${value}%' OR CONCAT(c.first_name, ' ', c.last_name) ILIKE '%${value}%')`);
+          } else if (table === 'customers') {
+            conditions.push(`(first_name ILIKE '%${value}%' OR last_name ILIKE '%${value}%' OR CONCAT(first_name, ' ', last_name) ILIKE '%${value}%')`);
+          }
+        } else if (key === 'customer_type' && typeof value === 'string') {
+          if (table === 'customers') {
+            conditions.push(`customer_type = '${value}'`);
+          } else if (table === 'orders') {
+            conditions.push(`c.customer_type = '${value}'`);
+          }
+        } else if (key === 'product_name' && typeof value === 'string') {
+          if (table === 'products') {
+            conditions.push(`product_name ILIKE '%${value}%'`);
+          }
+        }
+      }
+    }
+
+    // Apply role-based filtering
+    if (userRole === 'employee' && table === 'customers') {
+      conditions.push("status = 'active'"); // Employees only see active customers
+    }
+
+    // Add default active filters
+    if (['products', 'categories', 'warehouses'].includes(table) &&
+        !conditions.some(c => c.includes('status') || c.includes('is_active'))) {
+      if (table === 'categories') {
+        conditions.push('is_active = true');
+      } else {
+        conditions.push("status = 'active'");
+      }
+    }
+
+    return conditions.join(' AND ');
+  }
+
+  buildOrderClause(intent, table) {
+    // Use query parameters if available
+    if (intent.queryParams?.sortOrder) {
+      if (table === 'categories') {
+        return `category_name ${intent.queryParams.sortOrder}`;
+      }
+      return `created_at ${intent.queryParams.sortOrder}`;
+    }
+
+    // Default sorting
+    if (table === 'categories') {
+      return 'category_name ASC';
+    }
+
+    return null;
+  }
+
+  isTableAccessible(tableName, userRole) {
+    const restrictedTables = {
+      'employee': ['financial_data', 'salary_info'],
+      'manager': ['admin_logs']
+    };
+
+    const userRestricted = restrictedTables[userRole] || [];
+    return !userRestricted.includes(tableName);
   }
 
   buildSQLGenerationPrompt(intent) {
@@ -358,6 +798,9 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
                JOIN categories c ON p.category_id = c.category_id
                LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id`,
         count: `SELECT COUNT(*) as total_products FROM products p`,
+        aggregate: `SELECT COUNT(*) as product_count
+                   FROM products p
+                   JOIN categories c ON p.category_id = c.category_id`,
         analyze: `SELECT p.sku, p.product_name, c.category_name, w.warehouse_name, i.quantity_available, i.total_value, p.reorder_point,
                  ROUND((i.quantity_available::float / NULLIF(p.reorder_point, 0)), 2) as stock_ratio,
                  CASE
@@ -374,6 +817,43 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
                  JOIN inventory i ON p.product_id = i.product_id
                  JOIN categories c ON p.category_id = c.category_id
                  JOIN warehouses w ON i.warehouse_id = w.warehouse_id`
+      },
+      categories: {
+        list: `SELECT category_code, category_name,
+               CASE WHEN parent_category_id IS NULL THEN 'Top Level' ELSE 'Sub Category' END as category_type,
+               is_active
+               FROM categories`,
+        count: `SELECT COUNT(*) as total_categories FROM categories`,
+        analyze: `SELECT category_code, category_name,
+                 CASE WHEN parent_category_id IS NULL THEN 'Top Level' ELSE 'Sub Category' END as category_type,
+                 is_active,
+                 (SELECT COUNT(*) FROM products p WHERE p.category_id = categories.category_id) as product_count
+                 FROM categories`
+      },
+      suppliers: {
+        list: `SELECT supplier_code, company_name, rating, on_time_delivery_rate, quality_score, lead_time_days, status FROM suppliers`,
+        count: `SELECT COUNT(*) as total_suppliers FROM suppliers`,
+        analyze: `SELECT supplier_code, company_name, rating, on_time_delivery_rate, quality_score, lead_time_days, status,
+                 (SELECT COUNT(*) FROM products p WHERE p.supplier_id = suppliers.supplier_id) as product_count
+                 FROM suppliers`
+      },
+      warehouses: {
+        list: `SELECT warehouse_code, warehouse_name, manager_name, capacity, status FROM warehouses`,
+        count: `SELECT COUNT(*) as total_warehouses FROM warehouses`,
+        analyze: `SELECT warehouse_code, warehouse_name, manager_name, capacity, status,
+                 (SELECT COUNT(*) FROM inventory i WHERE i.warehouse_id = warehouses.warehouse_id) as inventory_items
+                 FROM warehouses`
+      },
+      order_items: {
+        list: `SELECT oi.order_item_id, o.order_number, o.order_date, oi.product_name, oi.sku, oi.quantity, oi.unit_price, oi.line_total, CONCAT(c.first_name, ' ', c.last_name) as customer_name
+               FROM order_items oi
+               JOIN orders o ON oi.order_id = o.order_id
+               JOIN customers c ON o.customer_id = c.customer_id`,
+        count: `SELECT COUNT(*) as total_order_items FROM order_items oi`,
+        analyze: `SELECT oi.product_name, oi.sku, SUM(oi.quantity) as total_quantity, SUM(oi.line_total) as total_value, COUNT(*) as order_count
+                 FROM order_items oi
+                 JOIN orders o ON oi.order_id = o.order_id
+                 GROUP BY oi.product_name, oi.sku`
       }
     };
 
@@ -427,7 +907,11 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
   buildWhereClause(intent) {
     const conditions = [];
 
-    for (const filter of intent.filters) {
+    // Handle both legacy format (intent.filters array) and new format (queryParams)
+    const filters = intent.filters || [];
+    const queryParams = intent.queryParams || {};
+
+    for (const filter of filters) {
       switch (filter) {
         case 'low_stock':
           conditions.push('i.quantity_available <= p.reorder_point');
@@ -460,6 +944,41 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
       }
     }
 
+    // Handle queryParams for dynamic filtering
+    if (queryParams.category) {
+      // Category filtering for products
+      if (intent.entity === 'products') {
+        conditions.push(`c.category_name ILIKE '%${queryParams.category}%'`);
+      }
+    }
+
+    // Handle customer_name filtering for order_items
+    if (queryParams.customer_name && intent.entity === 'order_items') {
+      const customerName = queryParams.customer_name.trim();
+      const nameParts = customerName.split(/\s+/);
+
+      if (nameParts.length >= 2) {
+        // Full name provided (e.g., "Sarah Johnson")
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' '); // Handle cases like "Van Der Berg"
+        conditions.push(`(c.first_name ILIKE '${firstName}' AND c.last_name ILIKE '${lastName}')`);
+      } else {
+        // Single name provided - search in both first and last name
+        conditions.push(`(c.first_name ILIKE '%${customerName}%' OR c.last_name ILIKE '%${customerName}%')`);
+      }
+    }
+
+    // Extract category from user request text as fallback
+    if (intent.entity === 'products' && intent.userRequest) {
+      const categoryMatch = intent.userRequest.toLowerCase().match(/in the (\w+) category|(\w+) category|for (\w+)/);
+      if (categoryMatch) {
+        const category = categoryMatch[1] || categoryMatch[2] || categoryMatch[3];
+        if (category && !queryParams.category) {
+          conditions.push(`c.category_name ILIKE '%${category}%'`);
+        }
+      }
+    }
+
     // Add default active filters
     if (intent.entity === 'products') {
       conditions.push("p.status = 'active'");
@@ -471,14 +990,78 @@ Generate ONLY the SQL query that best fulfills the business intent (no explanati
     return conditions.join(' AND ');
   }
 
-  generateCacheKey(intent) {
+  /**
+   * Generate LLM response using current model configuration
+   */
+  async generateLLMResponse(prompt, ollamaClient) {
+    const config = this.modelConfig.getCurrentConfig();
+
+    if (config.provider === 'ollama') {
+      return await ollamaClient.generateResponse(prompt, config.model, {
+        temperature: config.temperature,
+        max_tokens: config.max_tokens
+      });
+    } else if (config.provider === 'openai') {
+      // TODO: Implement OpenAI client
+      throw new Error('OpenAI provider not yet implemented');
+    } else if (config.provider === 'anthropic') {
+      // TODO: Implement Anthropic client
+      throw new Error('Anthropic provider not yet implemented');
+    } else {
+      throw new Error(`Unsupported provider: ${config.provider}`);
+    }
+  }
+
+  /**
+   * Get last used prompt and model information
+   */
+  getLastGenerationInfo() {
+    return {
+      prompt: this.lastUsedPrompt,
+      model: this.lastUsedModel,
+      config: this.modelConfig.getCurrentConfig()
+    };
+  }
+
+  /**
+   * Set model configuration for next generation
+   */
+  setModelConfig(provider, model, options = {}) {
+    return this.modelConfig.setModelConfig(provider, model, options);
+  }
+
+  /**
+   * Get available models for testing
+   */
+  getAvailableModels() {
+    return this.modelConfig.getProviders().map(provider => ({
+      provider: provider,
+      models: this.modelConfig.getModelsForProvider(provider.id)
+    }));
+  }
+
+  generateCacheKey(intent, schemaContext, userRole) {
+    const config = this.modelConfig.getCurrentConfig();
     return JSON.stringify({
       intent: intent.intent,
       entity: intent.entity,
-      filters: intent.filters.sort(),
+      filters: (intent.filters || []).sort(),
       limit: intent.limit,
-      sort: intent.sort
+      sort: intent.sort,
+      userRole: userRole,
+      schemaHash: schemaContext ? this.hashSchemaContext(schemaContext) : null,
+      model: `${config.provider}/${config.model}`,
+      temperature: config.temperature
     });
+  }
+
+  hashSchemaContext(schemaContext) {
+    if (!schemaContext.results || schemaContext.results.length === 0) {
+      return null;
+    }
+    // Create a simple hash of the schema context for caching
+    const contextStr = schemaContext.results.map(r => r.metadata?.table || '').join(',');
+    return Buffer.from(contextStr).toString('base64').slice(0, 16);
   }
 
   clearCache() {

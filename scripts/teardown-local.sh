@@ -71,28 +71,28 @@ confirm_teardown() {
 }
 
 # Function to stop and remove Docker containers
-teardown_docker() {
+teardown_podman() {
     print_status "Stopping and removing Docker containers..."
 
     cd "$PROJECT_DIR"
 
     # Stop all running containers
-    if [ -f "docker-compose.yml" ]; then
+    if [ -f "podman-compose.yml" ]; then
         print_status "Stopping Docker Compose services..."
-        docker-compose down --volumes --remove-orphans 2>/dev/null || true
+        podman-compose down --volumes --remove-orphans 2>/dev/null || true
 
         # Remove specific project containers if they exist
-        docker-compose down --volumes --rmi all 2>/dev/null || true
+        podman-compose down --volumes --rmi all 2>/dev/null || true
     fi
 
     # Stop specific containers by name
     CONTAINERS=("slm-postgres" "slm-chromadb" "slm-ollama" "slm-redis" "slm-orchestration" "slm-embedding" "slm-traefik" "slm-nginx" "slm-prometheus" "slm-grafana" "slm-elasticsearch" "slm-logstash" "slm-kibana" "slm-zap")
 
     for container in "${CONTAINERS[@]}"; do
-        if docker ps -a --format "table {{.Names}}" | grep -q "^$container$"; then
+        if podman ps -a --format "table {{.Names}}" | grep -q "^$container$"; then
             print_status "Stopping and removing container: $container"
-            docker stop "$container" 2>/dev/null || true
-            docker rm "$container" 2>/dev/null || true
+            podman stop "$container" 2>/dev/null || true
+            podman rm "$container" 2>/dev/null || true
         fi
     done
 
@@ -100,21 +100,21 @@ teardown_docker() {
     VOLUMES=("postgres_data" "redis_data" "prometheus_data" "grafana_data" "elasticsearch_data" "embedding_models" "embedding_cache")
 
     for volume in "${VOLUMES[@]}"; do
-        if docker volume ls --format "table {{.Name}}" | grep -q "^.*$volume$"; then
+        if podman volume ls --format "table {{.Name}}" | grep -q "^.*$volume$"; then
             print_status "Removing volume: $volume"
-            docker volume rm "$(docker volume ls --format "table {{.Name}}" | grep "$volume")" 2>/dev/null || true
+            podman volume rm "$(podman volume ls --format "table {{.Name}}" | grep "$volume")" 2>/dev/null || true
         fi
     done
 
     # Remove project network
-    if docker network ls --format "table {{.Name}}" | grep -q "slm-network"; then
+    if podman network ls --format "table {{.Name}}" | grep -q "slm-network"; then
         print_status "Removing Docker network: slm-network"
-        docker network rm slm-network 2>/dev/null || true
+        podman network rm slm-network 2>/dev/null || true
     fi
 
     # Clean up unused Docker resources
     print_status "Cleaning up unused Docker resources..."
-    docker system prune -f --volumes 2>/dev/null || true
+    podman system prune -f --volumes 2>/dev/null || true
 
     print_success "Docker teardown completed!"
 }
@@ -382,7 +382,7 @@ main() {
     # Execute teardown functions
     stop_background_processes
     stop_node_processes
-    teardown_docker
+    teardown_podman
     teardown_ollama
     teardown_python
     teardown_node

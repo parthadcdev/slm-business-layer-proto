@@ -85,16 +85,16 @@ check_requirements() {
     fi
 
     # Check Docker
-    if command_exists docker; then
-        DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | cut -d',' -f1)
+    if command_exists podman; then
+        DOCKER_VERSION=$(podman --version | cut -d' ' -f3 | cut -d',' -f1)
         print_success "Docker found: v$DOCKER_VERSION"
     else
         print_warning "Docker not found. Some features may not work without Docker."
     fi
 
     # Check Docker Compose
-    if command_exists docker-compose; then
-        COMPOSE_VERSION=$(docker-compose --version | cut -d' ' -f3 | cut -d',' -f1)
+    if command_exists podman-compose; then
+        COMPOSE_VERSION=$(podman-compose --version | cut -d' ' -f3 | cut -d',' -f1)
         print_success "Docker Compose found: v$COMPOSE_VERSION"
     else
         print_warning "Docker Compose not found. Some features may not work without Docker Compose."
@@ -673,7 +673,7 @@ show_next_steps() {
     echo
     echo -e "${BLUE}1. Start the services:${NC}"
     echo "   # Option A: Using Docker Compose (recommended)"
-    echo "   docker-compose up -d"
+    echo "   podman-compose up -d"
     echo
     echo "   # Option B: Start services individually"
     echo "   ollama serve                     # Terminal 1"

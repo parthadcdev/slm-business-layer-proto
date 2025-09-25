@@ -6,6 +6,12 @@ class ModelManager {
     this.currentModel = null;
     this.availableModels = [];
     this.modelConfigs = {
+      'phi3:mini': {
+        temperature: 0.6,
+        contextWindow: 4096,
+        maxTokens: 1024,
+        specialty: 'business'
+      },
       'llama3.2:3b': {
         temperature: 0.7,
         contextWindow: 8192,
@@ -50,7 +56,7 @@ class ModelManager {
   }
 
   async setDefaultModel() {
-    const preferredModels = ['llama3.2:3b', 'mistral:7b', 'codellama:7b'];
+    const preferredModels = ['phi3:mini', 'llama3.2:3b', 'mistral:7b', 'codellama:7b'];
 
     for (const model of preferredModels) {
       if (this.availableModels.includes(model)) {
@@ -101,6 +107,7 @@ class ModelManager {
 
   getBestModelForTask(taskType) {
     const taskModelMap = {
+      'business': 'phi3:mini',
       'code': 'codellama:7b',
       'reasoning': 'mistral:7b',
       'general': 'llama3.2:3b',

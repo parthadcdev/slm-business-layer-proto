@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Evaluation Framework - SLM Business Layer</title>
+    <!-- Author: Partha Chandramohan -->
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .header h1 {
+            color: #2c5aa0;
+            margin-bottom: 10px;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #2c5aa0;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #2c5aa0;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #1e3d6f;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .evaluation-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-top: 15px;
+        }
+        .spinner {
+            display: none;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2c5aa0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            display: none;
+            color: #2c5aa0;
+            font-style: italic;
+        }
+        .results-container {
+            display: none;
+            margin-top: 30px;
+        }
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .summary-item {
+            text-align: center;
+        }
+        .summary-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .summary-item .label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        .model-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .model-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background: white;
+        }
+        .model-card.success {
+            border-left: 4px solid #28a745;
+        }
+        .model-card.error {
+            border-left: 4px solid #dc3545;
+        }
+        .model-card.best {
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+        }
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .model-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c5aa0;
+        }
+        .accuracy-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .accuracy-excellent { background: #d4edda; color: #155724; }
+        .accuracy-good { background: #d1ecf1; color: #0c5460; }
+        .accuracy-fair { background: #fff3cd; color: #856404; }
+        .accuracy-poor { background: #f8d7da; color: #721c24; }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .sql-display {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .prompt-display {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .collapsible {
+            cursor: pointer;
+            padding: 10px;
+            background: #e9ecef;
+            border: none;
+            outline: none;
+            width: 100%;
+            text-align: left;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .collapsible:hover {
+            background: #dee2e6;
+        }
+        .collapsible-content {
+            display: none;
+            padding: 10px 0;
+        }
+        .collapsible.active + .collapsible-content {
+            display: block;
+        }
+        .test-presets {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .preset-btn {
+            background: #e9ecef;
+            color: #495057;
+            padding: 10px;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        .preset-btn:hover {
+            background: #dee2e6;
+        }
+        .history-section {
+            margin-top: 30px;
+        }
+        .history-item {
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: white;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Model Evaluation Framework</h1>
+            <p>Comprehensive testing and comparison of language models for business query processing</p>
+        </div>
+
+        <!-- Test Configuration -->
+        <div class="section">
+            <h3>🔧 Test Configuration</h3>
+            <div style="margin-bottom: 15px;">
+                <label for="testRequest"><strong>Business Request:</strong></label>
+                <textarea id="testRequest" rows="3" placeholder="Enter your business request to test across all models (e.g., 'Show me all pending orders from the last 30 days')">Show me all pending orders from the last 30 days</textarea>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label for="testContext"><strong>Context (JSON):</strong></label>
+                <textarea id="testContext" rows="2" placeholder='{"department": "sales", "user_role": "manager"}'>{"department": "sales", "user_role": "manager"}</textarea>
+            </div>
+
+            <div class="test-presets">
+                <button class="preset-btn" onclick="loadPreset('orders')">📋 Orders Analysis</button>
+                <button class="preset-btn" onclick="loadPreset('customers')">👥 Customer Analytics</button>
+                <button class="preset-btn" onclick="loadPreset('inventory')">📦 Inventory Management</button>
+                <button class="preset-btn" onclick="loadPreset('complex')">🔄 Complex Join Query</button>
+            </div>
+
+            <div class="evaluation-controls">
+                <button id="startEvaluationBtn" onclick="startEvaluation()">🚀 Start Model Evaluation</button>
+                <button onclick="loadHistory()">📊 Load History</button>
+                <button onclick="clearResults()">🗑️ Clear Results</button>
+                <div id="evaluationSpinner" class="spinner"></div>
+                <span id="evaluationLoadingText" class="loading-text">Evaluating all models...</span>
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <div id="resultsContainer" class="results-container">
+            <!-- Summary Card -->
+            <div class="summary-card">
+                <h3>📈 Evaluation Summary</h3>
+                <div class="summary-grid" id="summaryGrid">
+                    <!-- Summary items will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Model Results -->
+            <div id="modelResults" class="model-results">
+                <!-- Model cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- History Section -->
+        <div id="historySection" class="history-section" style="display: none;">
+            <div class="section">
+                <h3>📚 Evaluation History</h3>
+                <div id="historyResults">
+                    <!-- History items will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = '';
+        const API_BASE = 'http://localhost:8001';
+
+        // Auto-generate token on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            generateToken();
+        });
+
+        async function generateToken() {
+            try {
+                const response = await fetch(`${API_BASE}/api/generate-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: 'evaluation-user',
+                        role: 'admin',
+                        email: 'eval@test.com'
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentToken = data.token;
+                    console.log('Token generated for evaluation framework');
+                }
+            } catch (error) {
+                console.error('Token generation failed:', error);
+            }
+        }
+
+        function loadPreset(type) {
+            const presets = {
+                orders: {
+                    request: "Show me all pending orders from the last 30 days",
+                    context: '{"department": "sales", "user_role": "manager"}'
+                },
+                customers: {
+                    request: "Analyze customer value segments and identify high-value customers",
+                    context: '{"department": "marketing", "user_role": "analyst"}'
+                },
+                inventory: {
+                    request: "Find products with low stock levels that need reordering",
+                    context: '{"department": "operations", "user_role": "manager"}'
+                },
+                complex: {
+                    request: "Show customer order history with product details and supplier information for premium customers",
+                    context: '{"department": "business_intelligence", "user_role": "admin"}'
+                }
+            };
+
+            if (presets[type]) {
+                document.getElementById('testRequest').value = presets[type].request;
+                document.getElementById('testContext').value = presets[type].context;
+            }
+        }
+
+        async function startEvaluation() {
+            const request = document.getElementById('testRequest').value;
+            const contextText = document.getElementById('testContext').value;
+
+            if (!request.trim()) {
+                alert('Please enter a business request to evaluate');
+                return;
+            }
+
+            if (!currentToken) {
+                await generateToken();
+                if (!currentToken) {
+                    alert('Authentication failed. Please refresh the page.');
+                    return;
+                }
+            }
+
+            showLoading();
+
+            try {
+                let context = {};
+                if (contextText.trim()) {
+                    context = JSON.parse(contextText);
+                }
+
+                const response = await fetch(`${API_BASE}/api/evaluate-models`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        request: request,
+                        context: context
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data.data);
+                } else {
+                    throw new Error(data.error || 'Evaluation failed');
+                }
+
+            } catch (error) {
+                console.error('Evaluation error:', error);
+                alert('Evaluation failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('evaluationSpinner').style.display = 'inline-block';
+            document.getElementById('evaluationLoadingText').style.display = 'inline';
+            document.getElementById('startEvaluationBtn').disabled = true;
+        }
+
+        function hideLoading() {
+            document.getElementById('evaluationSpinner').style.display = 'none';
+            document.getElementById('evaluationLoadingText').style.display = 'none';
+            document.getElementById('startEvaluationBtn').disabled = false;
+        }
+
+        function displayResults(evaluationData) {
+            document.getElementById('resultsContainer').style.display = 'block';
+
+            // Display summary
+            displaySummary(evaluationData.summary, evaluationData);
+
+            // Display model results
+            displayModelResults(evaluationData.models, evaluationData.bestModel);
+        }
+
+        function displaySummary(summary, evaluationData) {
+            const summaryGrid = document.getElementById('summaryGrid');
+
+            summaryGrid.innerHTML = `
+                <div class="summary-item">
+                    <div class="value">${summary.totalModels}</div>
+                    <div class="label">Total Models</div>
+                </div>
+                <div class="summary-item">
+                    <div class="value">${summary.successfulModels}</div>
+                    <div class="label">Successful</div>
+                </div>
+                <div class="summary-item">
+                    <div class="value">${summary.successRate.toFixed(1)}%</div>
+                    <div class="label">Success Rate</div>
+                </div>
+                <div class="summary-item">
+                    <div class="value">${summary.averageLatency.toFixed(0)}ms</div>
+                    <div class="label">Avg Latency</div>
+                </div>
+                <div class="summary-item">
+                    <div class="value">${summary.averageAccuracy.toFixed(1)}%</div>
+                    <div class="label">Avg Accuracy</div>
+                </div>
+                <div class="summary-item">
+                    <div class="value">${evaluationData.totalEvaluationTime.toFixed(0)}ms</div>
+                    <div class="label">Total Time</div>
+                </div>
+            `;
+        }
+
+        function displayModelResults(models, bestModel) {
+            const resultsContainer = document.getElementById('modelResults');
+
+            resultsContainer.innerHTML = models.map(model => {
+                const isBest = bestModel && model.model === bestModel.model;
+                const cardClass = model.success ? 'success' : 'error';
+                const bestClass = isBest ? 'best' : '';
+
+                return `
+                    <div class="model-card ${cardClass} ${bestClass}">
+                        ${isBest ? '<div style="background: #ffd700; color: #000; text-align: center; padding: 5px; margin: -20px -20px 15px -20px; font-weight: bold;">🏆 BEST MODEL</div>' : ''}
+
+                        <div class="model-header">
+                            <div class="model-name">${model.displayName || model.model}</div>
+                            ${model.success ? `
+                                <div class="accuracy-badge ${getAccuracyClass(model.accuracy)}">${model.accuracy.toFixed(1)}%</div>
+                            ` : '<span style="color: #dc3545;">❌ FAILED</span>'}
+                        </div>
+
+                        ${model.success ? `
+                            <div class="metrics-grid">
+                                <div class="metric-item">
+                                    <span>Latency:</span>
+                                    <strong>${model.latency}ms</strong>
+                                </div>
+                                <div class="metric-item">
+                                    <span>Method:</span>
+                                    <strong>${model.metrics.method}</strong>
+                                </div>
+                                <div class="metric-item">
+                                    <span>SQL Gen Time:</span>
+                                    <strong>${model.metrics.sqlGenerationTime}ms</strong>
+                                </div>
+                                <div class="metric-item">
+                                    <span>Validation Score:</span>
+                                    <strong>${(model.metrics.validationScore * 100).toFixed(1)}%</strong>
+                                </div>
+                            </div>
+
+                            <button class="collapsible" onclick="toggleCollapsible(this)">📝 Generated SQL Query</button>
+                            <div class="collapsible-content">
+                                <div class="sql-display">${escapeHtml(model.sqlQuery || 'No SQL generated')}</div>
+                            </div>
+
+                            <button class="collapsible" onclick="toggleCollapsible(this)">🎯 LLM Prompt Used</button>
+                            <div class="collapsible-content">
+                                <div class="prompt-display">${escapeHtml(model.prompt || 'No prompt available')}</div>
+                            </div>
+
+                            <button class="collapsible" onclick="toggleCollapsible(this)">📊 Execution Results</button>
+                            <div class="collapsible-content">
+                                ${model.executionError ?
+                                    `<div style="color: #dc3545; font-weight: bold;">❌ ${model.executionError}</div>` :
+                                    `<div style="max-height: 200px; overflow-y: auto;">
+                                        <pre style="font-size: 11px;">${JSON.stringify(model.result, null, 2)}</pre>
+                                    </div>`
+                                }
+                            </div>
+                        ` : `
+                            <div style="color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 4px; margin-top: 10px;">
+                                <strong>Error:</strong> ${model.error || 'Unknown error'}
+                            </div>
+                        `}
+
+                        <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
+                            <strong>Strengths:</strong> ${model.strengths ? model.strengths.join(', ') : 'N/A'}<br>
+                            <strong>Use Case:</strong> ${model.useCase || 'N/A'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleCollapsible(element) {
+            element.classList.toggle('active');
+        }
+
+        function getAccuracyClass(accuracy) {
+            if (accuracy >= 90) return 'accuracy-excellent';
+            if (accuracy >= 70) return 'accuracy-good';
+            if (accuracy >= 50) return 'accuracy-fair';
+            return 'accuracy-poor';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadHistory() {
+            if (!currentToken) {
+                await generateToken();
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/evaluation-history?limit=5`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.data.length > 0) {
+                    displayHistory(data.data);
+                    document.getElementById('historySection').style.display = 'block';
+                } else {
+                    alert('No evaluation history found');
+                }
+
+            } catch (error) {
+                console.error('Error loading history:', error);
+                alert('Failed to load history: ' + error.message);
+            }
+        }
+
+        function displayHistory(historyItems) {
+            const historyResults = document.getElementById('historyResults');
+
+            historyResults.innerHTML = historyItems.map(item => `
+                <div class="history-item">
+                    <div class="history-header">
+                        <strong>${item.request}</strong>
+                        <span class="timestamp">${new Date(item.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div>
+                        Models: ${item.summary.totalModels} |
+                        Success: ${item.summary.successRate.toFixed(1)}% |
+                        Avg Accuracy: ${item.summary.averageAccuracy.toFixed(1)}% |
+                        Best: ${item.bestModel ? item.bestModel.displayName : 'None'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function clearResults() {
+            document.getElementById('resultsContainer').style.display = 'none';
+            document.getElementById('historySection').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

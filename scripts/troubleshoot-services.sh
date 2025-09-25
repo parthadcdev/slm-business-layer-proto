@@ -104,16 +104,16 @@ get_port_process() {
 }
 
 # Function to check Docker status
-check_docker_status() {
+check_podman_status() {
     print_header "Docker System Status"
 
-    if ! command_exists docker; then
+    if ! command_exists podman; then
         print_error "Docker is not installed or not in PATH"
         return 1
     fi
 
     # Check Docker daemon
-    if ! docker version >/dev/null 2>&1; then
+    if ! podman version >/dev/null 2>&1; then
         print_error "Docker daemon is not running"
         print_status "Attempting to start Docker daemon..."
 
@@ -121,18 +121,18 @@ check_docker_status() {
         if [[ "$OSTYPE" == "darwin"* ]]; then
             open -a Docker 2>/dev/null || print_warning "Could not start Docker Desktop"
         else
-            sudo systemctl start docker 2>/dev/null || print_warning "Could not start Docker service"
+            sudo systemctl start podman 2>/dev/null || print_warning "Could not start Docker service"
         fi
 
         # Wait for Docker to start
         local retries=10
-        while [ $retries -gt 0 ] && ! docker version >/dev/null 2>&1; do
+        while [ $retries -gt 0 ] && ! podman version >/dev/null 2>&1; do
             print_status "Waiting for Docker to start... ($retries attempts remaining)"
             sleep 3
             ((retries--))
         done
 
-        if ! docker version >/dev/null 2>&1; then
+        if ! podman version >/dev/null 2>&1; then
             print_error "Failed to start Docker daemon"
             return 1
         fi
@@ -142,10 +142,10 @@ check_docker_status() {
 
     # Show Docker info
     echo "Docker version:" | tee -a "$LOG_FILE"
-    docker version --format "Client: {{.Client.Version}}, Server: {{.Server.Version}}" | tee -a "$LOG_FILE"
+    podman version --format "Client: {{.Client.Version}}, Server: {{.Server.Version}}" | tee -a "$LOG_FILE"
 
     echo "Docker system info:" | tee -a "$LOG_FILE"
-    docker system df | tee -a "$LOG_FILE"
+    podman system df | tee -a "$LOG_FILE"
 
     return 0
 }
@@ -155,27 +155,27 @@ check_container_health() {
     local container_name=$1
     local service_name=$2
 
-    if ! docker ps --format "table {{.Names}}" | grep -q "^$container_name$"; then
+    if ! podman ps --format "table {{.Names}}" | grep -q "^$container_name$"; then
         print_error "Container $container_name is not running"
         return 1
     fi
 
     # Check container status
-    local status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null)
+    local status=$(podman inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null)
     if [ "$status" != "running" ]; then
         print_error "Container $container_name status: $status"
         return 1
     fi
 
     # Check health status if available
-    local health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
+    local health=$(podman inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
     if [ "$health" != "" ] && [ "$health" != "<no value>" ]; then
         if [ "$health" != "healthy" ]; then
             print_warning "Container $container_name health: $health"
 
             # Show health check logs
             print_debug "Health check logs for $container_name:"
-            docker inspect --format='{{range .State.Health.Log}}{{.Output}}{{end}}' "$container_name" | tail -5 | tee -a "$LOG_FILE"
+            podman inspect --format='{{range .State.Health.Log}}{{.Output}}{{end}}' "$container_name" | tail -5 | tee -a "$LOG_FILE"
             return 1
         else
             print_success "Container $container_name is healthy"
@@ -263,8 +263,8 @@ show_container_logs() {
 
     print_header "Last $lines lines of logs for $container_name"
 
-    if docker ps -a --format "table {{.Names}}" | grep -q "^$container_name$"; then
-        docker logs --tail "$lines" "$container_name" 2>&1 | tee -a "$LOG_FILE"
+    if podman ps -a --format "table {{.Names}}" | grep -q "^$container_name$"; then
+        podman logs --tail "$lines" "$container_name" 2>&1 | tee -a "$LOG_FILE"
     else
         print_error "Container $container_name not found"
     fi
@@ -273,7 +273,7 @@ show_container_logs() {
 # PostgreSQL configuration detection
 detect_postgres_config() {
     # Default to Docker configuration
-    POSTGRES_TYPE="docker"
+    POSTGRES_TYPE="podman"
     POSTGRES_CONTAINER="slm-postgres"
     POSTGRES_HOST="localhost"
     POSTGRES_PORT="5432"
@@ -282,13 +282,13 @@ detect_postgres_config() {
     POSTGRES_PASSWORD="app_password"
 
     # Check if Docker container exists and is running
-    local docker_available=false
-    if docker ps --format "table {{.Names}}" 2>/dev/null | grep -q "^$POSTGRES_CONTAINER$"; then
-        docker_available=true
+    local podman_available=false
+    if podman ps --format "table {{.Names}}" 2>/dev/null | grep -q "^$POSTGRES_CONTAINER$"; then
+        podman_available=true
         print_debug "Found running Docker PostgreSQL container: $POSTGRES_CONTAINER"
-    elif docker ps -a --format "table {{.Names}}" 2>/dev/null | grep -q "^$POSTGRES_CONTAINER$"; then
+    elif podman ps -a --format "table {{.Names}}" 2>/dev/null | grep -q "^$POSTGRES_CONTAINER$"; then
         print_debug "Found stopped Docker PostgreSQL container: $POSTGRES_CONTAINER"
-        docker_available=true
+        podman_available=true
     fi
 
     # Check for local PostgreSQL installations
@@ -327,8 +327,8 @@ detect_postgres_config() {
     fi
 
     # Determine which PostgreSQL to use
-    if [ "$FORCE_POSTGRES_TYPE" = "docker" ] && [ "$docker_available" = true ]; then
-        POSTGRES_TYPE="docker"
+    if [ "$FORCE_POSTGRES_TYPE" = "podman" ] && [ "$podman_available" = true ]; then
+        POSTGRES_TYPE="podman"
         print_status "Using Docker PostgreSQL (forced)"
     elif [ "$FORCE_POSTGRES_TYPE" = "local" ] && [ "$local_pg_available" = true ]; then
         POSTGRES_TYPE="local"
@@ -337,8 +337,8 @@ detect_postgres_config() {
         POSTGRES_USER="${USER:-postgres}"  # Use current user or postgres
         POSTGRES_PASSWORD=""  # Usually no password for local connections
         print_status "Using local PostgreSQL (forced)"
-    elif [ "$docker_available" = true ]; then
-        POSTGRES_TYPE="docker"
+    elif [ "$podman_available" = true ]; then
+        POSTGRES_TYPE="podman"
         print_status "Using Docker PostgreSQL (auto-detected)"
     elif [ "$local_pg_available" = true ]; then
         POSTGRES_TYPE="local"
@@ -366,10 +366,10 @@ check_postgres_connection() {
     fi
 
     # Test basic connectivity
-    if [ "$POSTGRES_TYPE" = "docker" ]; then
+    if [ "$POSTGRES_TYPE" = "podman" ]; then
         # Test Docker container connectivity
         print_status "Testing Docker PostgreSQL connectivity..."
-        if docker exec "$POSTGRES_CONTAINER" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+        if podman exec "$POSTGRES_CONTAINER" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
             print_success "Docker PostgreSQL is accepting connections"
         else
             print_error "Docker PostgreSQL is not accepting connections"
@@ -379,7 +379,7 @@ check_postgres_connection() {
         # Test SQL query execution via Docker
         print_status "Testing SQL query execution via Docker..."
         local test_query="SELECT version();"
-        local query_result=$(docker exec "$POSTGRES_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$test_query" -t 2>/dev/null)
+        local query_result=$(podman exec "$POSTGRES_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$test_query" -t 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$query_result" ]; then
             print_success "SQL query execution successful"
@@ -436,8 +436,8 @@ execute_postgres_query() {
     local query="$1"
     local output_format="${2:--t}"  # Default to tuples-only format
 
-    if [ "$POSTGRES_TYPE" = "docker" ]; then
-        docker exec "$POSTGRES_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$query" $output_format 2>/dev/null
+    if [ "$POSTGRES_TYPE" = "podman" ]; then
+        podman exec "$POSTGRES_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$query" $output_format 2>/dev/null
     else
         if [ -n "$POSTGRES_PASSWORD" ]; then
             PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$query" $output_format 2>/dev/null
@@ -523,18 +523,18 @@ check_postgres_logs() {
         return 1
     fi
 
-    if [ "$POSTGRES_TYPE" = "docker" ]; then
+    if [ "$POSTGRES_TYPE" = "podman" ]; then
         # Show recent error logs from Docker container
         print_status "Recent PostgreSQL errors and warnings..."
-        docker logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(ERROR|WARNING|FATAL)" | tail -20 | tee -a "$LOG_FILE"
+        podman logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(ERROR|WARNING|FATAL)" | tail -20 | tee -a "$LOG_FILE"
 
         # Show connection logs
         print_status "Recent connection activity..."
-        docker logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(connection|authentication)" | tail -10 | tee -a "$LOG_FILE"
+        podman logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(connection|authentication)" | tail -10 | tee -a "$LOG_FILE"
 
         # Show startup messages
         print_status "PostgreSQL startup messages..."
-        docker logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(database system|ready to accept)" | tail -5 | tee -a "$LOG_FILE"
+        podman logs "$POSTGRES_CONTAINER" 2>&1 | grep -E "(database system|ready to accept)" | tail -5 | tee -a "$LOG_FILE"
     else
         # For local PostgreSQL, try to find log files
         print_status "Searching for local PostgreSQL log files..."
@@ -596,15 +596,15 @@ check_postgres_disk_space() {
 
     # Check container disk usage
     print_status "Container disk usage..."
-    docker exec "$postgres_container" df -h 2>/dev/null | tee -a "$LOG_FILE"
+    podman exec "$postgres_container" df -h 2>/dev/null | tee -a "$LOG_FILE"
 
     # Check PostgreSQL data directory size
     print_status "PostgreSQL data directory size..."
-    docker exec "$postgres_container" du -sh /var/lib/postgresql/data 2>/dev/null | tee -a "$LOG_FILE"
+    podman exec "$postgres_container" du -sh /var/lib/postgresql/data 2>/dev/null | tee -a "$LOG_FILE"
 
     # Check individual database sizes
     print_status "Individual database sizes..."
-    docker exec "$postgres_container" psql -U postgres -c "
+    podman exec "$postgres_container" psql -U postgres -c "
         SELECT
             datname as database_name,
             pg_size_pretty(pg_database_size(datname)) as size
@@ -622,16 +622,16 @@ fix_postgres_issues() {
     local db_user="app_user"
 
     # Check if container is running
-    if ! docker ps --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
+    if ! podman ps --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
         print_status "PostgreSQL container is not running, attempting to start..."
-        docker-compose up -d postgres
+        podman-compose up -d postgres
         sleep 10
     fi
 
     # Wait for PostgreSQL to be ready
     print_status "Waiting for PostgreSQL to be ready..."
     local retries=30
-    while [ $retries -gt 0 ] && ! docker exec "$postgres_container" pg_isready -U "$db_user" >/dev/null 2>&1; do
+    while [ $retries -gt 0 ] && ! podman exec "$postgres_container" pg_isready -U "$db_user" >/dev/null 2>&1; do
         print_status "PostgreSQL not ready, waiting... ($retries attempts remaining)"
         sleep 2
         ((retries--))
@@ -644,30 +644,30 @@ fix_postgres_issues() {
 
     # Check and create database if it doesn't exist
     print_status "Verifying database exists..."
-    if ! docker exec "$postgres_container" psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
+    if ! podman exec "$postgres_container" psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
         print_status "Creating database $db_name..."
-        docker exec "$postgres_container" psql -U postgres -c "CREATE DATABASE $db_name;" 2>/dev/null || true
+        podman exec "$postgres_container" psql -U postgres -c "CREATE DATABASE $db_name;" 2>/dev/null || true
     fi
 
     # Check and create user if it doesn't exist
     print_status "Verifying database user exists..."
-    if ! docker exec "$postgres_container" psql -U postgres -c "\du" | grep -q "$db_user"; then
+    if ! podman exec "$postgres_container" psql -U postgres -c "\du" | grep -q "$db_user"; then
         print_status "Creating database user $db_user..."
-        docker exec "$postgres_container" psql -U postgres -c "CREATE USER $db_user WITH PASSWORD 'app_password';" 2>/dev/null || true
-        docker exec "$postgres_container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $db_user;" 2>/dev/null || true
+        podman exec "$postgres_container" psql -U postgres -c "CREATE USER $db_user WITH PASSWORD 'app_password';" 2>/dev/null || true
+        podman exec "$postgres_container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $db_user;" 2>/dev/null || true
     fi
 
     # Run database maintenance
     print_status "Running database maintenance..."
-    docker exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "VACUUM ANALYZE;" 2>/dev/null || true
+    podman exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "VACUUM ANALYZE;" 2>/dev/null || true
 
     # Check for corrupted indexes
     print_status "Checking for corrupted indexes..."
-    docker exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "REINDEX DATABASE $db_name;" 2>/dev/null || true
+    podman exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "REINDEX DATABASE $db_name;" 2>/dev/null || true
 
     # Update statistics
     print_status "Updating table statistics..."
-    docker exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "ANALYZE;" 2>/dev/null || true
+    podman exec "$postgres_container" psql -U "$db_user" -d "$db_name" -c "ANALYZE;" 2>/dev/null || true
 
     print_success "PostgreSQL maintenance completed"
 }
@@ -678,15 +678,15 @@ run_postgres_diagnostics() {
     local postgres_container="slm-postgres"
 
     # Check if PostgreSQL container exists and is running
-    if ! docker ps -a --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
+    if ! podman ps -a --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
         print_error "PostgreSQL container not found"
         return 1
     fi
 
-    if ! docker ps --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
+    if ! podman ps --format "table {{.Names}}" | grep -q "^$postgres_container$"; then
         print_error "PostgreSQL container is not running"
         print_status "Attempting to start PostgreSQL container..."
-        docker-compose up -d postgres
+        podman-compose up -d postgres
         sleep 10
     fi
 
@@ -698,7 +698,7 @@ run_postgres_diagnostics() {
 
     # Show container resource usage
     print_status "PostgreSQL container resource usage..."
-    docker stats "$postgres_container" --no-stream | tee -a "$LOG_FILE"
+    podman stats "$postgres_container" --no-stream | tee -a "$LOG_FILE"
 
     print_success "PostgreSQL diagnostics completed"
 }
@@ -718,7 +718,7 @@ backup_postgres() {
     print_status "Creating PostgreSQL backup..."
     print_status "Backup file: $backup_file"
 
-    if docker exec "$postgres_container" pg_dump -U "$db_user" -d "$db_name" > "$backup_file" 2>/dev/null; then
+    if podman exec "$postgres_container" pg_dump -U "$db_user" -d "$db_name" > "$backup_file" 2>/dev/null; then
         print_success "PostgreSQL backup completed successfully"
         print_status "Backup size: $(du -h "$backup_file" | cut -f1)"
     else
@@ -759,12 +759,12 @@ restore_postgres() {
     print_status "Restoring PostgreSQL from: $backup_file"
 
     # Drop and recreate database
-    docker exec "$postgres_container" psql -U postgres -c "DROP DATABASE IF EXISTS $db_name;" 2>/dev/null
-    docker exec "$postgres_container" psql -U postgres -c "CREATE DATABASE $db_name;" 2>/dev/null
-    docker exec "$postgres_container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $db_user;" 2>/dev/null
+    podman exec "$postgres_container" psql -U postgres -c "DROP DATABASE IF EXISTS $db_name;" 2>/dev/null
+    podman exec "$postgres_container" psql -U postgres -c "CREATE DATABASE $db_name;" 2>/dev/null
+    podman exec "$postgres_container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE $db_name TO $db_user;" 2>/dev/null
 
     # Restore from backup
-    if docker exec -i "$postgres_container" psql -U "$db_user" -d "$db_name" < "$backup_file" 2>/dev/null; then
+    if podman exec -i "$postgres_container" psql -U "$db_user" -d "$db_name" < "$backup_file" 2>/dev/null; then
         print_success "PostgreSQL restore completed successfully"
     else
         print_error "PostgreSQL restore failed"
@@ -794,8 +794,8 @@ check_system_resources() {
     fi
 
     echo "Docker resource usage:" | tee -a "$LOG_FILE"
-    if command_exists docker; then
-        docker stats --no-stream | tee -a "$LOG_FILE"
+    if command_exists podman; then
+        podman stats --no-stream | tee -a "$LOG_FILE"
     fi
 }
 
@@ -804,9 +804,9 @@ check_network() {
     print_header "Network Connectivity"
 
     # Check Docker network
-    if docker network ls | grep -q "slm-network"; then
+    if podman network ls | grep -q "slm-network"; then
         print_success "Docker network 'slm-network' exists"
-        docker network inspect slm-network --format='{{.IPAM.Config}}' | tee -a "$LOG_FILE"
+        podman network inspect slm-network --format='{{.IPAM.Config}}' | tee -a "$LOG_FILE"
     else
         print_error "Docker network 'slm-network' not found"
     fi
@@ -838,7 +838,7 @@ run_diagnostics() {
     # System checks
     check_system_resources
     check_network
-    check_docker_status || return 1
+    check_podman_status || return 1
 
     # Service checks
     print_header "Service Status Check"
@@ -895,14 +895,14 @@ restart_service() {
     print_status "Restarting $service_name service..."
 
     # Stop the container
-    if docker ps --format "table {{.Names}}" | grep -q "^$container_name$"; then
+    if podman ps --format "table {{.Names}}" | grep -q "^$container_name$"; then
         print_status "Stopping container $container_name..."
-        docker stop "$container_name" || print_warning "Failed to stop $container_name gracefully"
+        podman stop "$container_name" || print_warning "Failed to stop $container_name gracefully"
     fi
 
     # Start the container
     print_status "Starting container $container_name..."
-    if docker-compose up -d "$service_name" 2>/dev/null; then
+    if podman-compose up -d "$service_name" 2>/dev/null; then
         print_success "Successfully restarted $service_name"
 
         # Wait for service to be ready
@@ -936,7 +936,7 @@ restart_all_services() {
 
     # Stop all services
     print_status "Stopping all services..."
-    docker-compose down 2>/dev/null || print_warning "Some containers may have failed to stop"
+    podman-compose down 2>/dev/null || print_warning "Some containers may have failed to stop"
 
     # Wait a moment
     sleep 5
@@ -947,13 +947,13 @@ restart_all_services() {
 
     for service in "${core_services[@]}"; do
         print_status "Starting $service..."
-        docker-compose up -d "$service"
+        podman-compose up -d "$service"
         sleep 3
     done
 
     # Start application services
     print_status "Starting application services..."
-    docker-compose up -d
+    podman-compose up -d
 
     # Wait for services to be ready
     print_status "Waiting for services to be ready..."
@@ -968,14 +968,14 @@ fix_common_issues() {
     print_header "Fixing Common Issues"
 
     # Fix Docker network issues
-    if ! docker network ls | grep -q "slm-network"; then
+    if ! podman network ls | grep -q "slm-network"; then
         print_status "Creating Docker network..."
-        docker network create slm-network --driver bridge --subnet=172.25.0.0/16 2>/dev/null || true
+        podman network create slm-network --driver bridge --subnet=172.25.0.0/16 2>/dev/null || true
     fi
 
     # Clean up orphaned containers
     print_status "Cleaning up orphaned containers..."
-    docker system prune -f 2>/dev/null || true
+    podman system prune -f 2>/dev/null || true
 
     # Fix permission issues
     print_status "Fixing permission issues..."
@@ -1012,8 +1012,8 @@ show_service_status() {
             status="UP"
         fi
 
-        if [ -n "$container" ] && docker ps --format "table {{.Names}}" | grep -q "^$container$"; then
-            container_status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null)
+        if [ -n "$container" ] && podman ps --format "table {{.Names}}" | grep -q "^$container$"; then
+            container_status=$(podman inspect --format='{{.State.Status}}' "$container" 2>/dev/null)
         fi
 
         printf "%-20s %-15s %-10s %-30s\n" "$service" "$port" "$status" "$container_status" | tee -a "$LOG_FILE"
@@ -1027,9 +1027,9 @@ show_help() {
     echo "Usage: $0 [OPTIONS] [COMMAND] [ARGS]"
     echo
     echo "Options:"
-    echo "  --postgres-docker      Force use of Docker PostgreSQL"
+    echo "  --postgres-podman      Force use of Docker PostgreSQL"
     echo "  --postgres-local       Force use of local PostgreSQL (Homebrew/system)"
-    echo "  --postgres-type=TYPE   Force PostgreSQL type (docker|local)"
+    echo "  --postgres-type=TYPE   Force PostgreSQL type (podman|local)"
     echo
     echo "Commands:"
     echo "  diagnose, diag          Run comprehensive diagnostics"
@@ -1061,7 +1061,7 @@ show_help() {
     echo "  $0 logs chromadb 100   # Show last 100 lines of ChromaDB logs"
     echo "  $0 status              # Show status of all services"
     echo "  $0 postgres-diag       # Run PostgreSQL diagnostics (auto-detect)"
-    echo "  $0 --postgres-docker postgres-diag  # Force Docker PostgreSQL diagnostics"
+    echo "  $0 --postgres-podman postgres-diag  # Force Docker PostgreSQL diagnostics"
     echo "  $0 --postgres-local postgres-backup # Create backup from local PostgreSQL"
     echo "  $0 postgres-restore /path/to/backup.sql  # Restore from backup"
     echo
@@ -1076,8 +1076,8 @@ main() {
                 FORCE_POSTGRES_TYPE="${1#*=}"
                 shift
                 ;;
-            --postgres-docker)
-                FORCE_POSTGRES_TYPE="docker"
+            --postgres-podman)
+                FORCE_POSTGRES_TYPE="podman"
                 shift
                 ;;
             --postgres-local)

@@ -110,6 +110,12 @@ class PostgreSQLAdapter {
       else if (requestLower.includes('customer') && requestLower.includes('premium')) {
         queryResult = await this.getPremiumCustomers(limit);
       }
+      // Customer value analysis queries
+      else if ((requestLower.includes('who') || requestLower.includes('which customer')) &&
+               (requestLower.includes('spent') || requestLower.includes('spend')) &&
+               (requestLower.includes('most') || requestLower.includes('highest') || requestLower.includes('value'))) {
+        queryResult = await this.getCustomerSummary(limit || 10);
+      }
 
       // Product-related queries
       else if (requestLower.includes('product') && (requestLower.includes('list') || requestLower.includes('show'))) {
@@ -166,7 +172,7 @@ class PostgreSQLAdapter {
         o.order_date,
         o.status,
         o.priority,
-        c.CONCAT(c.first_name, ' ', c.last_name) as customer_name,
+        CONCAT(c.first_name, ' ', c.last_name) as customer_name,
         c.customer_type,
         o.total_amount
       FROM orders o
@@ -189,7 +195,7 @@ class PostgreSQLAdapter {
         o.order_number,
         o.order_date,
         o.status,
-        c.CONCAT(c.first_name, ' ', c.last_name) as customer_name,
+        CONCAT(c.first_name, ' ', c.last_name) as customer_name,
         o.total_amount,
         o.priority
       FROM orders o
@@ -325,7 +331,7 @@ class PostgreSQLAdapter {
     const sql = `
       SELECT
         customer_code,
-        CONCAT(c.first_name, ' ', c.last_name) as customer_name,
+        CONCAT(first_name, ' ', last_name) as customer_name,
         email,
         customer_type,
         loyalty_tier,

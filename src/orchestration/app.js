@@ -15,6 +15,7 @@ const validationMiddleware = require('./middleware/validation');
 const promptBuilder = require('./prompt-builder');
 const contextManager = require('./context-manager');
 const dbAdapter = require('../database/ai-database-adapter');
+const modelEvaluator = require('../evaluation/model-evaluator');
 const jwt = require('jsonwebtoken');
 const { urlBuilder } = require('../../config/service-urls');
 const securityConfig = require('../config/security-config');
@@ -192,7 +193,7 @@ app.get('/health', (req, res) => {
 // Main business logic endpoint
 app.post('/api/business-request', async (req, res) => {
   try {
-    const { request, context } = req.body;
+    const { request, context, model_config } = req.body;
     console.log(`Processing business request: "${request}"`);
 
     // Execute AI operations in parallel for better performance
@@ -200,7 +201,7 @@ app.post('/api/business-request', async (req, res) => {
       // Database operation
       async () => {
         const ollamaClient = require('../slm/ollama-client');
-        return await dbAdapter.processBusinessRequest(request, req.user, ollamaClient);
+        return await dbAdapter.processBusinessRequest(request, req.user, ollamaClient, model_config);
       },
       // Context enrichment
       async () => contextManager.enrichContext(context, req.user),
@@ -324,6 +325,67 @@ app.post('/api/business-request', async (req, res) => {
       success: false,
       error: 'Internal server error: ' + error.message,
       timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Model Evaluation endpoint
+app.post('/api/evaluate-models', authMiddleware, validationMiddleware, async (req, res) => {
+  try {
+    const { request, context } = req.body;
+
+    if (!request) {
+      return res.status(400).json({
+        success: false,
+        error: 'Business request is required'
+      });
+    }
+
+    console.log(`Starting model evaluation for: "${request}"`);
+
+    const ollamaClient = require('../slm/ollama-client');
+
+    const evaluationResult = await modelEvaluator.evaluateAllModels(
+      request,
+      context || {},
+      req.user.role || 'admin',
+      ollamaClient
+    );
+
+    res.json({
+      success: true,
+      message: 'Model evaluation completed',
+      data: evaluationResult,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error during model evaluation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Model evaluation failed: ' + error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Get evaluation history
+app.get('/api/evaluation-history', authMiddleware, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const history = modelEvaluator.getEvaluationHistory(limit);
+
+    res.json({
+      success: true,
+      data: history,
+      count: history.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching evaluation history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch evaluation history: ' + error.message
     });
   }
 });

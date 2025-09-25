@@ -5,13 +5,13 @@
 
 **Author:** Partha Chandramohan
 **Description:** Small Language Model powered business service layer replacing traditional custom-coded business logic
-**Status:** ✅ Functional Baseline v1.0 (September 2025)
-**Last Updated:** September 18, 2025
+**Status:** ✅ Enhanced Baseline v1.1 with Model Evaluation Framework (September 2025)
+**Last Updated:** September 24, 2025
 
 ## Project Overview
 This project implements a revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system. The architecture leverages Retrieval-Augmented Generation (RAG) with business requirement documents (BRDs) to eliminate manual coding of business logic.
 
-## ✅ Current Baseline Status (v1.0)
+## ✅ Current Baseline Status (v1.1)
 
 ### What's Working
 ✅ **Core Orchestration Service** - Express.js app handling business requests
@@ -20,6 +20,8 @@ This project implements a revolutionary web application architecture that replac
 ✅ **Database Adapters** - AI-enhanced and standard PostgreSQL adapters
 ✅ **Authentication & Authorization** - JWT-based security with role-based access
 ✅ **Test Interface** - Browser-based testing interface at test-interface.html
+✅ **Model Evaluation Framework** - Comprehensive multi-model testing and comparison
+✅ **Parameterized Model Configuration** - Support for multiple LLM/SLM providers
 ✅ **Service Health Monitoring** - Real-time status for all core services
 ✅ **Intelligent Fallbacks** - System continues functioning when services are offline
 
@@ -37,11 +39,21 @@ This project implements a revolutionary web application architecture that replac
 3. **Customer Analytics**: Customer value analysis, segmentation, engagement tracking
 4. **Inventory Management**: Stock levels, reorder alerts, warehouse distribution
 5. **Supplier Analysis**: Performance metrics, delivery tracking, quality scores
+6. **Model Evaluation & Comparison**: Test multiple LLM/SLM models with comprehensive metrics
+7. **Multi-Provider Model Support**: Ollama, OpenAI, Anthropic with intelligent model selection
+8. **Performance Analytics**: Latency, accuracy, SQL complexity, and optimization scoring
+
+### Recent Enhancements (v1.1)
+✅ **Model Evaluation Framework**: Complete testing and comparison system for multiple LLMs
+✅ **Parameterized Model Configuration**: Dynamic model selection with provider abstraction
+✅ **Enhanced Test Interfaces**: Dedicated model comparison UI with detailed metrics
+✅ **Improved Model Management**: Support for phi3:mini, llama3.2:latest, qwen3:4b, codellama:7b
+✅ **Comprehensive Metrics**: Latency, accuracy, SQL complexity, result relevance scoring
 
 ### Known Limitations (Future Enhancement Opportunities)
-⚠️ **Ollama/SLM Integration**: Service running but models not fully operational for inference
+⚠️ **Ollama Model Timeouts**: Some models experience timeout issues during inference
 ⚠️ **ChromaDB/RAG**: Vector database service running but client integration needs refinement
-⚠️ **Advanced AI Features**: Currently using intelligent fallbacks instead of full SLM processing
+⚠️ **Advanced AI Features**: Enhanced SLM processing with improved error handling
 
 ## Architecture Components
 
@@ -122,6 +134,14 @@ This project implements a revolutionary web application architecture that replac
 - `src/slm/inference-service.js` - SLM interaction and response processing
 - `src/slm/action-parser.js` - Parse SLM responses into executable actions
 - `src/slm/guardrails.js` - Prompt injection protection
+
+### Model Configuration & Evaluation Framework
+- `src/config/model-config.js` - Centralized multi-provider model configuration
+- `src/evaluation/model-evaluator.js` - Comprehensive model testing and comparison framework
+- `src/ai/sql-generator.js` - Enhanced SQL generation with model parameterization
+- `src/ai/intent-classifier.js` - Intent classification with model selection support
+- `model-evaluation.html` - Dedicated UI for model comparison and testing
+- API Endpoints: `/api/evaluate-models`, `/api/evaluation-history`
 
 ### Local RAG Implementation
 - `src/rag/chromadb-client.js` - ChromaDB client for local vector storage
@@ -306,6 +326,7 @@ open test-interface.html
 ### Current Working URLs
 - **Orchestration Service**: http://localhost:8001
 - **Test Interface**: http://localhost:8001/test-interface.html
+- **Model Evaluation UI**: http://localhost:8001/model-evaluation.html
 - **PostgreSQL**: localhost:5432 (Docker)
 - **Ollama API**: http://localhost:11434
 - **ChromaDB**: http://localhost:8000
@@ -366,6 +387,9 @@ curl -X POST http://localhost:8001/api/business-request \
 - **Troubleshooting**: `scripts/troubleshoot-services.sh`
 - **Core Service**: `src/orchestration/app.js`
 - **SQL Generator**: `src/ai/sql-generator.js`
+- **Model Configuration**: `src/config/model-config.js`
+- **Model Evaluator**: `src/evaluation/model-evaluator.js`
+- **Evaluation UI**: `model-evaluation.html`
 
 ## 🔧 Developer Scripts & Workflow
 
@@ -535,6 +559,106 @@ docker volume prune -f
 docker-compose up -d
 ./scripts/manage-services.sh start
 ```
+
+## 🔬 Model Evaluation Framework (v1.1)
+
+### Overview
+The Model Evaluation Framework provides comprehensive testing and comparison capabilities for multiple LLM/SLM providers. It enables systematic evaluation of model performance across different business scenarios with detailed metrics and analytics.
+
+### Key Features
+- **Multi-Provider Support**: Ollama (local), OpenAI, Anthropic with unified configuration
+- **Comprehensive Metrics**: Latency, accuracy, SQL complexity, result relevance, query optimization
+- **Intelligent Scoring**: Weighted algorithm (60% accuracy, 25% speed, 15% complexity handling)
+- **Historical Analysis**: Evaluation history with configurable limits and trend analysis
+- **Dedicated UI**: Purpose-built interface for model comparison and testing
+
+### Supported Models
+#### Ollama (Local SLM)
+- **phi3:mini** - Fast inference, code generation, SQL queries (Default)
+- **llama3.2:latest** - Better reasoning, complex queries, business logic
+- **qwen3:4b** - Large context (32K), mathematical reasoning, business intelligence
+- **mistral:7b** - Multilingual, structured output, instruction following
+- **codellama:7b** - Complex SQL, joins, subqueries, debug queries
+
+#### Cloud Providers (API Key Required)
+- **OpenAI**: gpt-3.5-turbo, gpt-4, gpt-4-turbo
+- **Anthropic**: claude-3-haiku, claude-3-sonnet
+
+### Evaluation Metrics
+1. **Latency Analysis**
+   - Intent classification time
+   - SQL generation time
+   - Query execution time
+   - Total end-to-end latency
+
+2. **Accuracy Scoring** (0-100)
+   - SQL validation score (40% weight)
+   - SQL generation success (20% weight)
+   - Query execution success (20% weight)
+   - Result relevance (10% weight)
+   - Intent alignment (10% weight)
+
+3. **Quality Metrics**
+   - SQL complexity scoring (joins, subqueries, aggregations)
+   - Query optimization assessment
+   - Business logic alignment
+   - Error handling capability
+
+### API Endpoints
+```javascript
+// Evaluate all models for a business request
+POST /api/evaluate-models
+Authorization: Bearer <jwt-token>
+Body: {
+  "request": "Show me all pending orders",
+  "context": {},
+  "userRole": "admin"
+}
+
+// Get evaluation history
+GET /api/evaluation-history?limit=10
+Authorization: Bearer <jwt-token>
+```
+
+### Usage Examples
+```bash
+# Generate authentication token
+curl -X POST http://localhost:8001/api/generate-token -H "Content-Type: application/json" -d '{}'
+
+# Run model evaluation
+curl -X POST http://localhost:8001/api/evaluate-models \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"request": "Who are our most valuable customers?", "context": {}}'
+
+# Access evaluation UI
+open http://localhost:8001/model-evaluation.html
+```
+
+### Sample Evaluation Results
+From actual testing with "Show me all pending orders":
+
+| Model | Latency | Accuracy | SQL Generated | Status |
+|-------|---------|----------|---------------|--------|
+| phi3:mini | 70.3s | 87.9% | Complex multi-table JOIN | ✅ Success |
+| llama3.2:latest | ~30s | - | Timeout | ⏱️ Timeout |
+| qwen3:4b | ~30s | - | Timeout | ⏱️ Timeout |
+| codellama:7b | ~30s | - | Timeout | ⏱️ Timeout |
+
+**Best Model**: phi3:mini with overall score of 75.16 (accuracy: 87.9%, complexity: 10, optimization: 8)
+
+### Configuration Management
+The framework uses `src/config/model-config.js` for centralized model management:
+- Provider endpoints and authentication
+- Model-specific parameters (temperature, max_tokens, context_length)
+- Strengths and use case recommendations
+- Availability validation and health checks
+
+### Integration Points
+- **SQL Generator**: Enhanced with model parameterization support
+- **Intent Classifier**: Multi-model intent analysis
+- **Database Adapter**: Model configuration passing and metadata handling
+- **Test Interfaces**: Both basic and advanced model comparison UIs
 
 ## 🚀 Future Enhancement Roadmap
 

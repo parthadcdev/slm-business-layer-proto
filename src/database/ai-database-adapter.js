@@ -6,6 +6,7 @@
  */
 const { Pool } = require('pg');
 const intentClassifier = require('../ai/intent-classifier');
+const SchemaAwareIntentClassifier = require('../ai/schema-aware-intent-classifier');
 const sqlGenerator = require('../ai/sql-generator');
 const securityConfig = require('../config/security-config');
 
@@ -15,6 +16,8 @@ class AIDatabaseAdapter {
     this.initialized = false;
     this.queryHistory = [];
     this.maxHistorySize = 100;
+    this.schemaAwareClassifier = new SchemaAwareIntentClassifier();
+    this.useSchemaAware = process.env.USE_SCHEMA_AWARE === 'true' || false; // Feature flag, default to LM-first approach
   }
 
   async initialize() {
@@ -45,6 +48,17 @@ class AIDatabaseAdapter {
 
       // Test connection
       await this.pool.query('SELECT NOW()');
+
+      // Initialize schema knowledge base if using schema-aware classification
+      if (this.useSchemaAware) {
+        const schemaInitialized = await this.schemaAwareClassifier.initializeSchemaKnowledge();
+        if (schemaInitialized) {
+          console.log('Schema-aware classification enabled with full ChromaDB support');
+        } else {
+          console.log('Schema-aware classification enabled with fallback mode (ChromaDB unavailable)');
+        }
+      }
+
       this.initialized = true;
       console.log('AI Database adapter initialized successfully');
     } catch (error) {
@@ -55,31 +69,60 @@ class AIDatabaseAdapter {
     }
   }
 
-  async processBusinessRequest(userRequest, user, ollamaClient) {
+  async processBusinessRequest(userRequest, user, ollamaClient, modelConfig = null) {
     if (!this.initialized) {
       await this.initialize();
     }
 
     const startTime = Date.now();
-    let intent, sql, results;
+    let intent, sqlResult, results, generationMetadata = null;
 
     try {
-      // Stage 1: Intent Classification
+      // Stage 1: Intent Classification (with schema awareness)
       console.log(`Step 1: Classifying intent for: "${userRequest}"`);
-      intent = await intentClassifier.classifyIntent(userRequest, ollamaClient);
-      console.log('Intent classified:', JSON.stringify(intent, null, 2));
 
-      // Stage 2: SQL Generation
+      if (this.useSchemaAware) {
+        console.log('Using schema-aware intent classification');
+        intent = await this.schemaAwareClassifier.classifyIntent(userRequest, user.role || 'employee');
+        console.log('Schema-aware intent classified:', JSON.stringify(intent, null, 2));
+      } else {
+        console.log('Using legacy intent classification');
+        intent = await intentClassifier.classifyIntent(userRequest, ollamaClient);
+        console.log('Legacy intent classified:', JSON.stringify(intent, null, 2));
+      }
+
+      // Stage 2: SQL Generation (with schema context and model config)
       console.log('Step 2: Generating SQL query');
-      sql = await sqlGenerator.generateSQL(intent, ollamaClient);
+
+      if (this.useSchemaAware && intent.schemaContext) {
+        console.log('Using schema-context SQL generation');
+        sqlResult = await sqlGenerator.generateSQL(intent, intent.schemaContext, user.role || 'employee', ollamaClient, modelConfig);
+      } else {
+        console.log('Using legacy SQL generation');
+        sqlResult = await sqlGenerator.generateSQL(intent, null, null, ollamaClient, modelConfig);
+      }
+
+      // Handle both old string format and new object format
+      const sql = sqlResult.sql || sqlResult;
+      generationMetadata = sqlResult.prompt ? {
+        prompt: sqlResult.prompt,
+        model: sqlResult.model,
+        method: sqlResult.method,
+        attempts: sqlResult.attempts,
+        validationScore: sqlResult.validationScore
+      } : null;
+
       console.log('Generated SQL:', sql);
+      if (generationMetadata) {
+        console.log('SQL Generation metadata:', generationMetadata);
+      }
 
       // Stage 3: Execute Query
       console.log('Step 3: Executing query');
       results = await this.executeQuery(sql);
 
       // Stage 4: Format Response
-      const response = this.formatResponse(userRequest, intent, sql, results, startTime);
+      const response = this.formatResponse(userRequest, intent, sql, results, startTime, generationMetadata);
 
       // Log the interaction
       this.logQueryHistory(userRequest, intent, sql, results.length, Date.now() - startTime);
@@ -89,7 +132,24 @@ class AIDatabaseAdapter {
     } catch (error) {
       console.error('AI Database processing error:', error);
 
-      // Fallback to simple processing
+      // If schema-aware classification failed, try legacy approach
+      if (this.useSchemaAware && !intent) {
+        console.log('Schema-aware classification failed, trying legacy approach');
+        try {
+          intent = await intentClassifier.classifyIntent(userRequest, ollamaClient);
+          sql = await sqlGenerator.generateSQL(intent, null, null, ollamaClient);
+          results = await this.executeQuery(sql);
+
+          const response = this.formatResponse(userRequest, intent, sql, results, startTime);
+          response.fallback_used = 'legacy_classifier';
+          this.logQueryHistory(userRequest, intent, sql, results.length, Date.now() - startTime);
+          return response;
+        } catch (fallbackError) {
+          console.error('Legacy fallback also failed:', fallbackError);
+        }
+      }
+
+      // Final fallback to postgres adapter
       return await this.fallbackProcessing(userRequest, user, error);
     }
   }
@@ -109,13 +169,13 @@ class AIDatabaseAdapter {
     }
   }
 
-  formatResponse(userRequest, intent, sql, results, startTime) {
+  formatResponse(userRequest, intent, sql, results, startTime, generationMetadata = null) {
     const processingTime = Date.now() - startTime;
 
     // Generate human-readable summary
     const summary = this.generateSummary(intent, results);
 
-    return {
+    const response = {
       success: true,
       data: results,
       summary: summary,
@@ -127,6 +187,13 @@ class AIDatabaseAdapter {
       confidence: intent.confidence,
       ai_powered: true
     };
+
+    // Include generation metadata if available
+    if (generationMetadata) {
+      response.generation_metadata = generationMetadata;
+    }
+
+    return response;
   }
 
   generateSummary(intent, results) {
@@ -142,7 +209,7 @@ class AIDatabaseAdapter {
       return `No ${entity} found matching your criteria`;
     }
 
-    const filters = intent.filters.length > 0 ? ` with filters: ${intent.filters.join(', ')}` : '';
+    const filters = (intent.filters && intent.filters.length > 0) ? ` with filters: ${intent.filters.join(', ')}` : '';
     const limitText = intent.limit ? ` (showing top ${Math.min(intent.limit, count)})` : '';
 
     switch (entity) {

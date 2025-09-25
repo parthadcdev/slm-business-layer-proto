@@ -4,7 +4,7 @@
  * @author Partha Chandramohan
  * @description ChromaDB client for local vector storage and semantic search operations
  */
-const chromadb = require('chromadb');
+const { ChromaClient } = require('chromadb');
 const { urlBuilder } = require('../../config/service-urls');
 
 class ChromaDBClient {
@@ -17,9 +17,9 @@ class ChromaDBClient {
 
   async initialize() {
     try {
-      // Use ChromaDB client directly
-      this.client = new chromadb.HttpClient({
-        path: urlBuilder.getBaseUrl('chromadb')
+      // Use ChromaDB client connected to Docker instance
+      this.client = new ChromaClient({
+        path: "http://localhost:8000"
       });
 
       // Create or get collection
@@ -81,6 +81,45 @@ class ChromaDBClient {
       console.error('Error adding documents:', error);
       throw new Error('Failed to add documents to vector store');
     }
+  }
+
+  /**
+   * Get or create a collection with the specified name
+   */
+  async getOrCreateCollection(collectionName, metadata = {}) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    try {
+      // Use ChromaDB's built-in getOrCreateCollection method
+      const collection = await this.client.getOrCreateCollection({
+        name: collectionName,
+        metadata: {
+          description: metadata.description || 'ChromaDB collection',
+          created_at: new Date().toISOString(),
+          ...metadata
+        }
+      });
+      console.log(`Collection ready: ${collectionName}`);
+      return collection;
+    } catch (error) {
+      console.error(`Failed to get/create collection ${collectionName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a specific collection by name
+   */
+  async getCollection(collectionName) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    return await this.client.getCollection({
+      name: collectionName
+    });
   }
 
   async search(query, options = {}) {

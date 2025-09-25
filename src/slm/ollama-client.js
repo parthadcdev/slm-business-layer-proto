@@ -14,7 +14,25 @@ class OllamaClient {
     this.retryAttempts = 3;
   }
 
-  async generateResponse(prompt, model = 'llama3.2:3b', options = {}) {
+  async generateResponse(prompt, model = 'phi3:mini', options = {}) {
+    // First check if any models are available
+    try {
+      const models = await this.listAvailableModels();
+      if (!models.models || models.models.length === 0) {
+        throw new Error('No models available in Ollama. Please install a model first using: ollama pull <model-name>');
+      }
+
+      // Use first available model if requested model is not available
+      const availableModelNames = models.models.map(m => m.name);
+      if (!availableModelNames.includes(model)) {
+        console.log(`Model ${model} not available. Available models: ${availableModelNames.join(', ')}`);
+        console.log(`Using first available model: ${availableModelNames[0]}`);
+        model = availableModelNames[0];
+      }
+    } catch (error) {
+      throw new Error(`Ollama service unavailable: ${error.message}`);
+    }
+
     const requestData = {
       model,
       prompt,
@@ -52,7 +70,7 @@ class OllamaClient {
         console.error(`Ollama request attempt ${attempt} failed:`, error.message);
 
         if (attempt === this.retryAttempts) {
-          throw new Error(`Failed to get response from Ollama after ${this.retryAttempts} attempts`);
+          throw new Error(`Failed to get response from Ollama after ${this.retryAttempts} attempts: ${error.message}`);
         }
 
         // Wait before retry

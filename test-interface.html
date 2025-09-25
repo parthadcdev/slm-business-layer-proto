@@ -98,6 +98,47 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Spinner Styles */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #2c5aa0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            display: none;
+            color: #2c5aa0;
+            font-style: italic;
+            margin-left: 10px;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        button:disabled:hover {
+            background-color: #cccccc;
+        }
+
+        .button-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -110,17 +151,58 @@
         <!-- Service Health Section -->
         <div class="section">
             <h3>🔍 Service Health Check</h3>
-            <button onclick="checkHealth()">Check API Health</button>
-            <button onclick="checkAllServices()">Check All Services</button>
+            <div class="button-container">
+                <button id="healthBtn" onclick="checkHealth()">Check API Health</button>
+                <button id="servicesBtn" onclick="checkAllServices()">Check All Services</button>
+                <div id="healthSpinner" class="spinner"></div>
+                <span id="healthLoadingText" class="loading-text">Checking health...</span>
+            </div>
             <div id="healthResponse" class="response"></div>
         </div>
 
         <!-- Token Generation Section -->
         <div class="section">
             <h3>🔑 JWT Token Management</h3>
-            <button onclick="generateToken()">Generate New Token</button>
-            <button onclick="copyToken()">Copy Token</button>
+            <div class="button-container">
+                <button id="tokenBtn" onclick="generateToken()">Generate New Token</button>
+                <button onclick="copyToken()">Copy Token</button>
+                <div id="tokenSpinner" class="spinner"></div>
+                <span id="tokenLoadingText" class="loading-text">Generating token...</span>
+            </div>
             <div id="tokenDisplay" class="token-display"></div>
+        </div>
+
+        <!-- Model Configuration Section -->
+        <div class="section">
+            <h3>🤖 Language Model Configuration</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <label for="modelProvider">Provider:</label>
+                    <select id="modelProvider" onchange="updateModelOptions()">
+                        <option value="ollama">Ollama (Local)</option>
+                        <option value="openai">OpenAI (Requires API Key)</option>
+                        <option value="anthropic">Anthropic (Requires API Key)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="modelName">Model:</label>
+                    <select id="modelName">
+                        <option value="phi3:mini">Phi-3 Mini (Fast SQL)</option>
+                        <option value="llama3.2:3b">Llama 3.2 3B (Complex Analysis)</option>
+                        <option value="mistral:7b">Mistral 7B (Structured Output)</option>
+                        <option value="codellama:7b">CodeLlama 7B (Complex SQL)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="modelTemperature">Temperature:</label>
+                    <input type="number" id="modelTemperature" value="0.1" min="0" max="1" step="0.1" style="width: 100%;">
+                </div>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadRecommendedSettings()">Load Recommended Settings</button>
+                <button onclick="resetModelConfig()">Reset to Default</button>
+                <span id="modelDescription" style="margin-left: 15px; font-style: italic; color: #666;">Fast inference for SQL generation</span>
+            </div>
         </div>
 
         <!-- Business Request Section -->
@@ -132,10 +214,28 @@
             <label for="requestContext">Context (JSON):</label>
             <textarea id="requestContext" rows="2" placeholder='{"department": "sales", "user_role": "manager"}'></textarea>
 
-            <button onclick="sendBusinessRequest()">Send Request</button>
-            <button onclick="loadExampleRequest()">Load Example</button>
+            <div class="button-container">
+                <button id="sendRequestBtn" onclick="sendBusinessRequest()">Send Request</button>
+                <div id="requestSpinner" class="spinner"></div>
+                <span id="requestLoadingText" class="loading-text">Processing request...</span>
+                <button onclick="loadExampleRequest()">Load Example</button>
+            </div>
 
             <div id="businessResponse" class="response"></div>
+
+            <!-- New section for SQL Generation Details -->
+            <div id="sqlGenerationDetails" style="margin-top: 20px; display: none;">
+                <h4>🔍 SQL Generation Details</h4>
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                    <div id="modelUsed" style="margin-bottom: 10px;"></div>
+                    <div id="generationMethod" style="margin-bottom: 10px;"></div>
+                    <div id="validationScore" style="margin-bottom: 15px;"></div>
+                    <div>
+                        <strong>Prompt Used:</strong>
+                        <pre id="promptDisplay" style="background-color: white; padding: 10px; border: 1px solid #ddd; border-radius: 3px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.4;"></pre>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- API Testing Section -->
@@ -166,8 +266,29 @@
         // API Base URL
         const API_BASE = 'http://localhost:8001';
 
+        // Loading state management functions
+        function showLoading(spinnerId, textId, buttonId = null) {
+            document.getElementById(spinnerId).style.display = 'inline-block';
+            document.getElementById(textId).style.display = 'inline';
+            if (buttonId) {
+                const button = document.getElementById(buttonId);
+                button.disabled = true;
+            }
+        }
+
+        function hideLoading(spinnerId, textId, buttonId = null) {
+            document.getElementById(spinnerId).style.display = 'none';
+            document.getElementById(textId).style.display = 'none';
+            if (buttonId) {
+                const button = document.getElementById(buttonId);
+                button.disabled = false;
+            }
+        }
+
         // Generate JWT Token
         async function generateToken() {
+            showLoading('tokenSpinner', 'tokenLoadingText', 'tokenBtn');
+
             try {
                 const response = await fetch(`${API_BASE}/api/generate-token`, {
                     method: 'POST',
@@ -204,6 +325,8 @@ Generated: ${new Date().toLocaleString()}
             } catch (error) {
                 showStatus('Error generating token: ' + error.message, 'error');
                 document.getElementById('tokenDisplay').innerHTML = 'Token generation failed: ' + error.message;
+            } finally {
+                hideLoading('tokenSpinner', 'tokenLoadingText', 'tokenBtn');
             }
         }
 
@@ -220,6 +343,8 @@ Generated: ${new Date().toLocaleString()}
 
         // Check API Health
         async function checkHealth() {
+            showLoading('healthSpinner', 'healthLoadingText', 'healthBtn');
+
             try {
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
@@ -228,19 +353,24 @@ Generated: ${new Date().toLocaleString()}
             } catch (error) {
                 document.getElementById('healthResponse').textContent = 'Error: ' + error.message;
                 showStatus('Health check failed', 'error');
+            } finally {
+                hideLoading('healthSpinner', 'healthLoadingText', 'healthBtn');
             }
         }
 
         // Check All Services
         async function checkAllServices() {
-            const services = [
-                { name: 'Main API', url: `${API_BASE}/health` },
-                { name: 'ChromaDB', url: `${API_BASE}/api/service-status/chromadb` },
-                { name: 'Ollama', url: `${API_BASE}/api/service-status/ollama` },
-                { name: 'PostgreSQL', url: `${API_BASE}/api/service-status/postgres` }
-            ];
+            showLoading('healthSpinner', 'healthLoadingText', 'servicesBtn');
 
-            let results = 'Service Status Check:\n\n';
+            try {
+                const services = [
+                    { name: 'Main API', url: `${API_BASE}/health` },
+                    { name: 'ChromaDB', url: `${API_BASE}/api/service-status/chromadb` },
+                    { name: 'Ollama', url: `${API_BASE}/api/service-status/ollama` },
+                    { name: 'PostgreSQL', url: `${API_BASE}/api/service-status/postgres` }
+                ];
+
+                let results = 'Service Status Check:\n\n';
 
             for (const service of services) {
                 try {
@@ -259,7 +389,13 @@ Generated: ${new Date().toLocaleString()}
                 }
             }
 
-            document.getElementById('healthResponse').textContent = results;
+                document.getElementById('healthResponse').textContent = results;
+            } catch (error) {
+                document.getElementById('healthResponse').textContent = 'Error checking services: ' + error.message;
+                showStatus('Service check failed', 'error');
+            } finally {
+                hideLoading('healthSpinner', 'healthLoadingText', 'servicesBtn');
+            }
         }
 
         // Send Business Request
@@ -277,11 +413,16 @@ Generated: ${new Date().toLocaleString()}
                 return;
             }
 
+            showLoading('requestSpinner', 'requestLoadingText', 'sendRequestBtn');
+
             try {
                 let contextObj = {};
                 if (context) {
                     contextObj = JSON.parse(context);
                 }
+
+                // Get model configuration
+                const modelConfig = getModelConfig();
 
                 const response = await fetch(`${API_BASE}/api/business-request`, {
                     method: 'POST',
@@ -291,12 +432,16 @@ Generated: ${new Date().toLocaleString()}
                     },
                     body: JSON.stringify({
                         request: request,
-                        context: contextObj
+                        context: contextObj,
+                        model_config: modelConfig
                     })
                 });
 
                 const data = await response.json();
                 document.getElementById('businessResponse').textContent = JSON.stringify(data, null, 2);
+
+                // Display SQL generation details if available
+                displaySQLGenerationDetails(data);
 
                 if (response.ok) {
                     showStatus('Request sent successfully', 'success');
@@ -306,6 +451,8 @@ Generated: ${new Date().toLocaleString()}
             } catch (error) {
                 document.getElementById('businessResponse').textContent = 'Error: ' + error.message;
                 showStatus('Request failed', 'error');
+            } finally {
+                hideLoading('requestSpinner', 'requestLoadingText', 'sendRequestBtn');
             }
         }
 
@@ -396,10 +543,146 @@ Generated: ${new Date().toLocaleString()}
             }, 3000);
         }
 
+        // Model configuration functions
+        const modelData = {
+            ollama: {
+                'phi3:mini': { description: 'Fast inference for SQL generation', temperature: 0.1, max_tokens: 500 },
+                'llama3.2:3b': { description: 'Complex business analysis queries', temperature: 0.2, max_tokens: 800 },
+                'qwen3:4b': { description: 'Large context analysis with math reasoning', temperature: 0.1, max_tokens: 800 },
+                'mistral:7b': { description: 'Structured output and multilingual', temperature: 0.15, max_tokens: 600 },
+                'codellama:7b': { description: 'Complex SQL with joins and subqueries', temperature: 0.05, max_tokens: 1000 }
+            },
+            openai: {
+                'gpt-3.5-turbo': { description: 'Production SQL generation (requires API key)', temperature: 0.1, max_tokens: 500 },
+                'gpt-4': { description: 'Complex business intelligence (requires API key)', temperature: 0.1, max_tokens: 800 }
+            },
+            anthropic: {
+                'claude-3-haiku': { description: 'Fast and accurate SQL generation (requires API key)', temperature: 0.1, max_tokens: 500 },
+                'claude-3-sonnet': { description: 'Complex business analysis (requires API key)', temperature: 0.1, max_tokens: 800 }
+            }
+        };
+
+        function updateModelOptions() {
+            const provider = document.getElementById('modelProvider').value;
+            const modelSelect = document.getElementById('modelName');
+            const models = modelData[provider];
+
+            // Clear current options
+            modelSelect.innerHTML = '';
+
+            // Add new options
+            for (const [modelId, modelInfo] of Object.entries(models)) {
+                const option = document.createElement('option');
+                option.value = modelId;
+                option.textContent = `${modelId} (${modelInfo.description.split(' ')[0]} ${modelInfo.description.split(' ')[1]})`;
+                modelSelect.appendChild(option);
+            }
+
+            // Update temperature and description
+            updateModelDescription();
+        }
+
+        function updateModelDescription() {
+            const provider = document.getElementById('modelProvider').value;
+            const model = document.getElementById('modelName').value;
+            const modelInfo = modelData[provider][model];
+
+            if (modelInfo) {
+                document.getElementById('modelDescription').textContent = modelInfo.description;
+                document.getElementById('modelTemperature').value = modelInfo.temperature;
+            }
+        }
+
+        function loadRecommendedSettings() {
+            updateModelDescription();
+            showStatus('Loaded recommended settings for selected model', 'success');
+        }
+
+        function resetModelConfig() {
+            document.getElementById('modelProvider').value = 'ollama';
+            updateModelOptions();
+            document.getElementById('modelName').value = 'phi3:mini';
+            updateModelDescription();
+            showStatus('Reset to default model configuration', 'success');
+        }
+
+        function getModelConfig() {
+            return {
+                provider: document.getElementById('modelProvider').value,
+                model: document.getElementById('modelName').value,
+                options: {
+                    temperature: parseFloat(document.getElementById('modelTemperature').value),
+                    max_tokens: modelData[document.getElementById('modelProvider').value][document.getElementById('modelName').value].max_tokens
+                }
+            };
+        }
+
+        function displaySQLGenerationDetails(data) {
+            const detailsDiv = document.getElementById('sqlGenerationDetails');
+
+            // Check if we have generation metadata
+            let generationMetadata = null;
+
+            if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                // Look for generation metadata in the first result
+                const firstResult = data.data[0];
+                if (firstResult.generation_metadata) {
+                    generationMetadata = firstResult.generation_metadata;
+                }
+            } else if (data && data.generation_metadata) {
+                generationMetadata = data.generation_metadata;
+            }
+
+            if (generationMetadata && generationMetadata.prompt) {
+                // Show the details section
+                detailsDiv.style.display = 'block';
+
+                // Update model used
+                const modelInfo = generationMetadata.model || {};
+                document.getElementById('modelUsed').innerHTML = `
+                    <strong>Model Used:</strong> ${modelInfo.provider_name || 'Unknown'} - ${modelInfo.model_name || 'Unknown'}
+                `;
+
+                // Update generation method
+                document.getElementById('generationMethod').innerHTML = `
+                    <strong>Generation Method:</strong> ${generationMetadata.method || 'unknown'}
+                    ${generationMetadata.attempts ? ` (${generationMetadata.attempts} attempts)` : ''}
+                `;
+
+                // Update validation score
+                if (generationMetadata.validationScore !== undefined) {
+                    const scoreColor = generationMetadata.validationScore >= 0.8 ? '#28a745' :
+                                       generationMetadata.validationScore >= 0.5 ? '#ffc107' : '#dc3545';
+                    document.getElementById('validationScore').innerHTML = `
+                        <strong>Validation Score:</strong>
+                        <span style="color: ${scoreColor}; font-weight: bold;">
+                            ${(generationMetadata.validationScore * 100).toFixed(1)}%
+                        </span>
+                    `;
+                } else {
+                    document.getElementById('validationScore').innerHTML = '';
+                }
+
+                // Display the prompt
+                document.getElementById('promptDisplay').textContent = generationMetadata.prompt;
+            } else {
+                // Hide the details section if no prompt available
+                detailsDiv.style.display = 'none';
+            }
+        }
+
+        // Initialize model options when page loads
+        function initializeModelConfig() {
+            updateModelOptions();
+            // Set up event listener for model name changes
+            document.getElementById('modelName').addEventListener('change', updateModelDescription);
+        }
+
         // Initialize on page load
         window.onload = function() {
             generateToken();
             checkHealth();
+            initializeModelConfig();
         };
     </script>
 </body>

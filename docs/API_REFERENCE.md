@@ -692,6 +692,250 @@ const response = await fetch('/api/business-request', {
 });
 ```
 
+## Model Evaluation API
+
+### Evaluate All Models
+
+```http
+POST /api/evaluate-models
+Content-Type: application/json
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+```json
+{
+  "request": "string",        // Natural language business request
+  "context": {                // Optional context object
+    "business_context": "string",
+    "user_preferences": {}
+  },
+  "userRole": "admin|manager|user"  // Optional, defaults to token role
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Model evaluation completed",
+  "data": {
+    "request": "Show me all pending orders",
+    "context": {},
+    "userRole": "admin",
+    "timestamp": "2025-09-24T20:12:15.158Z",
+    "totalEvaluationTime": 70360,
+    "models": [
+      {
+        "provider": "ollama",
+        "model": "phi3:mini",
+        "displayName": "Phi-3 Mini",
+        "strengths": ["Fast inference", "Code generation"],
+        "useCase": "Default for SQL generation",
+        "success": true,
+        "latency": 70339,
+        "accuracy": 87.9,
+        "sqlQuery": "SELECT o.order_number, o.order_date...",
+        "prompt": "You are a PostgreSQL SQL expert...",
+        "result": [
+          {"order_number": "ORD-2024-004", "customer_name": "Emily Davis"}
+        ],
+        "metrics": {
+          "intentClassificationTime": 5351,
+          "sqlGenerationTime": 64879,
+          "sqlExecutionTime": 109,
+          "totalTime": 70339,
+          "method": "llm-partial",
+          "attempts": 3,
+          "validationScore": 0.71,
+          "sqlComplexity": 10,
+          "resultRelevance": 8,
+          "queryOptimization": 8,
+          "errorHandling": 1.0
+        },
+        "executionError": null
+      }
+    ],
+    "summary": {
+      "averageLatency": 17585,
+      "averageAccuracy": 29.1,
+      "successRate": 100,
+      "fastestModel": {
+        "provider": "ollama",
+        "model": "codellama:7b",
+        "latency": 0
+      },
+      "mostAccurate": {
+        "provider": "ollama",
+        "model": "phi3:mini",
+        "accuracy": 87.9
+      },
+      "totalModels": 4,
+      "successfulModels": 4
+    },
+    "bestModel": {
+      "provider": "ollama",
+      "model": "phi3:mini",
+      "overallScore": 75.16
+    }
+  },
+  "timestamp": "2025-09-24T20:13:45.637Z"
+}
+```
+
+### Get Evaluation History
+
+```http
+GET /api/evaluation-history?limit=10
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Query Parameters:**
+- `limit` (optional): Maximum number of evaluations to return (default: 10, max: 100)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "request": "Show me all pending orders",
+      "context": {},
+      "userRole": "admin",
+      "timestamp": "2025-09-24T20:12:15.158Z",
+      "totalEvaluationTime": 70360,
+      "models": [...],
+      "summary": {...},
+      "bestModel": {...}
+    }
+  ],
+  "count": 1,
+  "timestamp": "2025-09-24T20:13:45.637Z"
+}
+```
+
+### Model Configuration Endpoints
+
+#### Get Available Providers
+
+```http
+GET /api/model-providers
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "endpoint": "http://localhost:11434",
+      "requires_api_key": false
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "endpoint": "https://api.openai.com/v1",
+      "requires_api_key": true
+    }
+  ]
+}
+```
+
+#### Get Models for Provider
+
+```http
+GET /api/model-providers/{providerId}/models
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "phi3:mini",
+      "name": "Phi-3 Mini",
+      "context_length": 4096,
+      "strengths": ["Fast inference", "Code generation", "SQL queries"],
+      "use_case": "Default for SQL generation",
+      "recommended_temperature": 0.1,
+      "recommended_max_tokens": 500
+    }
+  ]
+}
+```
+
+### Error Responses
+
+**Authentication Error:**
+```json
+{
+  "success": false,
+  "error": "JWT token required",
+  "timestamp": "2025-09-24T20:13:45.637Z"
+}
+```
+
+**Validation Error:**
+```json
+{
+  "success": false,
+  "error": "Business request is required",
+  "timestamp": "2025-09-24T20:13:45.637Z"
+}
+```
+
+**Evaluation Error:**
+```json
+{
+  "success": false,
+  "error": "Model evaluation failed: All models timed out",
+  "timestamp": "2025-09-24T20:13:45.637Z"
+}
+```
+
+### Usage Examples
+
+**JavaScript/Node.js:**
+```javascript
+// Evaluate all models
+const response = await fetch('/api/evaluate-models', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    request: 'Who are our most valuable customers?',
+    context: { business_context: 'customer_analysis' }
+  })
+});
+
+const evaluation = await response.json();
+console.log('Best model:', evaluation.data.bestModel);
+```
+
+**cURL:**
+```bash
+# Generate token
+TOKEN=$(curl -s -X POST http://localhost:8001/api/generate-token \
+  -H "Content-Type: application/json" -d '{}' | jq -r '.token')
+
+# Run evaluation
+curl -X POST http://localhost:8001/api/evaluate-models \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"request": "Show me inventory levels by warehouse"}'
+
+# Get history
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8001/api/evaluation-history?limit=5"
+```
+
 ---
 
-This API reference provides complete specifications for all modules in the SLM Business Service Layer. Use this documentation for integration, testing, and development purposes.
+This API reference provides complete specifications for all modules in the SLM Business Service Layer, including the comprehensive Model Evaluation Framework. Use this documentation for integration, testing, and development purposes.

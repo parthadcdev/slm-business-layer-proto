@@ -285,7 +285,7 @@ build_project() {
     fi
 
     # Copy configuration files
-    for file in docker-compose.yml .env .env.local; do
+    for file in podman-compose.yml .env .env.local; do
         if [[ -f "$file" ]]; then
             cp "$file" "$DIST_DIR/"
             log_info "Copied $file to dist"

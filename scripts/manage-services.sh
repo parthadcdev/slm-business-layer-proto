@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 # Service configuration
 ORCHESTRATION_PROCESS="node src/orchestration/app.js"
 ORCHESTRATION_PORT=8001
-DOCKER_COMPOSE_FILE="docker-compose.yml"
+DOCKER_COMPOSE_FILE="podman-compose.yml"
 PROJECT_NAME="slm-business-layer-proto"
 
 # Function to print colored output
@@ -44,10 +44,13 @@ print_section() {
     echo -e "${BLUE}--- $1 ---${NC}"
 }
 
-# Function to check if Docker is running
-check_docker() {
-    if ! docker info >/dev/null 2>&1; then
-        print_error "Docker is not running. Please start Docker first."
+# Function to check if Podman is running
+check_podman() {
+    # Set Docker host for Podman compatibility
+    export DOCKER_HOST='unix:///var/folders/hg/klx2qy294h5g3z8yh39n_9y40000gn/T/podman/podman-machine-default-api.sock'
+
+    if ! podman machine inspect >/dev/null 2>&1; then
+        print_error "Podman machine is not initialized. Please run 'podman machine init' first."
         exit 1
     fi
 }
@@ -64,6 +67,71 @@ check_orchestration() {
 # Function to get orchestration service PID
 get_orchestration_pid() {
     pgrep -f "$ORCHESTRATION_PROCESS" | head -1
+}
+
+# Function to check if local Ollama is running
+check_local_ollama() {
+    if pgrep -x "ollama" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+        return 0  # Running
+    else
+        return 1  # Not running
+    fi
+}
+
+# Function to start local Ollama
+start_local_ollama() {
+    print_section "Starting Local Ollama"
+
+    if check_local_ollama; then
+        print_status "Local Ollama is already running ✓"
+        return 0
+    fi
+
+    # Check if Ollama is installed
+    if ! command -v ollama >/dev/null 2>&1; then
+        print_warning "Ollama not found in PATH. Please install Ollama first."
+        print_status "Install from: https://ollama.com/install"
+        return 1
+    fi
+
+    # Start Ollama in background
+    print_status "Starting Ollama service..."
+    nohup ollama serve >/dev/null 2>&1 &
+
+    # Wait for Ollama to start
+    sleep 3
+
+    if check_local_ollama; then
+        print_status "Local Ollama started successfully ✓"
+        # Check health
+        check_service_health "Ollama" "http://localhost:11434/api/tags" || true
+        return 0
+    else
+        print_error "Failed to start local Ollama"
+        return 1
+    fi
+}
+
+# Function to stop local Ollama
+stop_local_ollama() {
+    print_section "Stopping Local Ollama"
+
+    if ! check_local_ollama; then
+        print_status "Local Ollama is not running"
+        return 0
+    fi
+
+    # Kill Ollama processes
+    pkill -x ollama 2>/dev/null || true
+    pkill -f "ollama serve" 2>/dev/null || true
+
+    sleep 2
+
+    if ! check_local_ollama; then
+        print_status "Local Ollama stopped successfully ✓"
+    else
+        print_warning "Some Ollama processes may still be running"
+    fi
 }
 
 # Function to check service health
@@ -97,11 +165,11 @@ check_service_health() {
 stop_docker_services() {
     print_section "Stopping Docker Services"
 
-    check_docker
+    check_podman
 
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" ps -q | grep -q .; then
+    if podman-compose -f "$DOCKER_COMPOSE_FILE" ps -q | grep -q .; then
         print_status "Stopping Docker containers..."
-        docker-compose -f "$DOCKER_COMPOSE_FILE" down
+        podman-compose -f "$DOCKER_COMPOSE_FILE" down
         print_status "Docker services stopped ✓"
     else
         print_warning "No Docker services running"
@@ -139,10 +207,10 @@ stop_orchestration() {
 start_docker_services() {
     print_section "Starting Docker Services"
 
-    check_docker
+    check_podman
 
     print_status "Starting core Docker services..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d postgres chromadb ollama redis
+    podman-compose -f "$DOCKER_COMPOSE_FILE" up -d postgres chromadb redis
 
     print_status "Waiting for services to initialize..."
     sleep 10
@@ -201,9 +269,32 @@ show_status() {
     # Docker services
     print_section "Docker Services"
     if docker info >/dev/null 2>&1; then
-        docker-compose -f "$DOCKER_COMPOSE_FILE" ps
+        podman-compose -f "$DOCKER_COMPOSE_FILE" ps
     else
         print_error "Docker is not running"
+    fi
+
+    echo
+
+    # Local Ollama service
+    print_section "Local Ollama Service"
+    if check_local_ollama; then
+        print_status "Running ✓"
+        # Try to get model list
+        if curl -s "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+            if command -v jq >/dev/null 2>&1; then
+                local model_count=$(curl -s "http://localhost:11434/api/tags" | jq -r '.models | length' 2>/dev/null || echo "unknown")
+                echo -e "${GREEN}Available Models:${NC} $model_count"
+            else
+                echo -e "${GREEN}API Status:${NC} Connected"
+            fi
+            echo "  • API Endpoint: http://localhost:11434"
+        fi
+    else
+        print_warning "Not running ✗"
+        if ! command -v ollama >/dev/null 2>&1; then
+            print_warning "Ollama not installed. Install from: https://ollama.com/install"
+        fi
     fi
 
     echo
@@ -321,6 +412,8 @@ main() {
             ensure_logs_directory
             start_docker_services
             echo
+            start_local_ollama
+            echo
             start_orchestration
             echo
             show_status
@@ -332,6 +425,8 @@ main() {
             print_header "Stopping All Services"
             stop_orchestration
             echo
+            stop_local_ollama
+            echo
             stop_docker_services
             echo
             print_status "All services stopped successfully!"
@@ -340,11 +435,15 @@ main() {
             print_header "Restarting All Services"
             stop_orchestration
             echo
+            stop_local_ollama
+            echo
             stop_docker_services
             echo
             sleep 3
             ensure_logs_directory
             start_docker_services
+            echo
+            start_local_ollama
             echo
             start_orchestration
             echo
@@ -402,6 +501,41 @@ main() {
                     ;;
             esac
             ;;
+        "ollama-only")
+            case "${2:-}" in
+                "start")
+                    start_local_ollama
+                    ;;
+                "stop")
+                    stop_local_ollama
+                    ;;
+                "restart")
+                    stop_local_ollama
+                    sleep 2
+                    start_local_ollama
+                    ;;
+                "status")
+                    print_section "Local Ollama Service"
+                    if check_local_ollama; then
+                        print_status "Running ✓"
+                        if curl -s "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+                            echo -e "\n${GREEN}Available Models:${NC}"
+                            if command -v jq >/dev/null 2>&1; then
+                                curl -s "http://localhost:11434/api/tags" | jq -r '.models[]? | "  • " + .name' 2>/dev/null || echo "  • Unable to fetch model details"
+                            else
+                                echo "  • Use 'ollama list' to see available models (jq not available)"
+                            fi
+                        fi
+                    else
+                        print_warning "Not running ✗"
+                    fi
+                    ;;
+                *)
+                    print_error "Usage: $0 ollama-only [start|stop|restart|status]"
+                    exit 1
+                    ;;
+            esac
+            ;;
         "help"|"-h"|"--help")
             cat << EOF
 SLM Business Service Layer - Service Management Script
@@ -418,6 +552,7 @@ Commands:
 
   docker-only [start|stop|restart]        Manage only Docker services
   orchestration-only [start|stop|restart] Manage only orchestration service
+  ollama-only [start|stop|restart|status] Manage only local Ollama service
 
   help, -h, --help      Show this help message
 
@@ -427,12 +562,13 @@ Examples:
   $0 status             # Check service status
   $0 test               # Run health tests
   $0 docker-only start  # Start only Docker services
+  $0 ollama-only status # Check Ollama status and models
 
 Service Ports:
   8001  - Orchestration Service
   5432  - PostgreSQL Database
   8000  - ChromaDB Vector Database
-  11434 - Ollama SLM Service
+  11434 - Ollama SLM Service (Local)
   6379  - Redis Cache
 
 Access Points:
