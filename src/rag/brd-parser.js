@@ -1,23 +1,23 @@
 // Business requirements document parser
-const fs = require('fs').promises;
-const path = require('path');
-const mammoth = require('mammoth');
-const pdfParse = require('pdf-parse');
+const fs = require("fs").promises;
+const path = require("path");
+const mammoth = require("mammoth");
+const pdfParse = require("pdf-parse");
 
 class BRDParser {
   constructor() {
-    this.supportedFormats = ['.txt', '.md', '.docx', '.pdf', '.json'];
+    this.supportedFormats = [".txt", ".md", ".docx", ".pdf", ".json"];
     this.sectionHeaders = [
-      'business requirements',
-      'functional requirements',
-      'business rules',
-      'user stories',
-      'acceptance criteria',
-      'business logic',
-      'process flow',
-      'workflow',
-      'data requirements',
-      'integration requirements'
+      "business requirements",
+      "functional requirements",
+      "business rules",
+      "user stories",
+      "acceptance criteria",
+      "business logic",
+      "process flow",
+      "workflow",
+      "data requirements",
+      "integration requirements",
     ];
   }
 
@@ -29,30 +29,30 @@ class BRDParser {
         throw new Error(`Unsupported file format: ${extension}`);
       }
 
-      let content = '';
+      let content = "";
       let metadata = {
         source: filePath,
         filename: path.basename(filePath),
         extension: extension,
-        parsed_at: new Date().toISOString()
+        parsed_at: new Date().toISOString(),
       };
 
       switch (extension) {
-        case '.txt':
-        case '.md':
+        case ".txt":
+        case ".md":
           content = await this.parseTextFile(filePath);
           break;
-        case '.docx':
+        case ".docx":
           const docxResult = await this.parseDocxFile(filePath);
           content = docxResult.content;
           metadata = { ...metadata, ...docxResult.metadata };
           break;
-        case '.pdf':
+        case ".pdf":
           const pdfResult = await this.parsePdfFile(filePath);
           content = pdfResult.content;
           metadata = { ...metadata, ...pdfResult.metadata };
           break;
-        case '.json':
+        case ".json":
           const jsonResult = await this.parseJsonFile(filePath);
           content = jsonResult.content;
           metadata = { ...metadata, ...jsonResult.metadata };
@@ -66,7 +66,7 @@ class BRDParser {
         content: content,
         metadata: metadata,
         structured: structured,
-        chunks: this.chunkDocument(content, structured)
+        chunks: this.chunkDocument(content, structured),
       };
     } catch (error) {
       console.error(`Error parsing document ${filePath}:`, error);
@@ -75,7 +75,7 @@ class BRDParser {
   }
 
   async parseTextFile(filePath) {
-    const content = await fs.readFile(filePath, 'utf8');
+    const content = await fs.readFile(filePath, "utf8");
     return content;
   }
 
@@ -86,10 +86,10 @@ class BRDParser {
     return {
       content: result.value,
       metadata: {
-        type: 'docx',
-        hasImages: result.messages.some(msg => msg.type === 'image'),
-        warnings: result.messages.filter(msg => msg.type === 'warning')
-      }
+        type: "docx",
+        hasImages: result.messages.some((msg) => msg.type === "image"),
+        warnings: result.messages.filter((msg) => msg.type === "warning"),
+      },
     };
   }
 
@@ -100,21 +100,21 @@ class BRDParser {
     return {
       content: data.text,
       metadata: {
-        type: 'pdf',
+        type: "pdf",
         pages: data.numpages,
         info: data.info,
-        version: data.version
-      }
+        version: data.version,
+      },
     };
   }
 
   async parseJsonFile(filePath) {
-    const content = await fs.readFile(filePath, 'utf8');
+    const content = await fs.readFile(filePath, "utf8");
     const data = JSON.parse(content);
 
     // Extract text content from JSON
-    let textContent = '';
-    if (typeof data === 'string') {
+    let textContent = "";
+    if (typeof data === "string") {
       textContent = data;
     } else if (data.content) {
       textContent = data.content;
@@ -125,29 +125,29 @@ class BRDParser {
     return {
       content: textContent,
       metadata: {
-        type: 'json',
+        type: "json",
         originalStructure: data,
-        hasStructuredData: true
-      }
+        hasStructuredData: true,
+      },
     };
   }
 
-  extractTextFromObject(obj, prefix = '') {
-    let text = '';
+  extractTextFromObject(obj, prefix = "") {
+    let text = "";
 
     for (const [key, value] of Object.entries(obj)) {
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         text += `${prefix}${key}: ${value}\n`;
       } else if (Array.isArray(value)) {
         text += `${prefix}${key}:\n`;
         value.forEach((item, index) => {
-          if (typeof item === 'string') {
+          if (typeof item === "string") {
             text += `${prefix}  ${index + 1}. ${item}\n`;
-          } else if (typeof item === 'object') {
+          } else if (typeof item === "object") {
             text += this.extractTextFromObject(item, `${prefix}  `);
           }
         });
-      } else if (typeof value === 'object' && value !== null) {
+      } else if (typeof value === "object" && value !== null) {
         text += `${prefix}${key}:\n`;
         text += this.extractTextFromObject(value, `${prefix}  `);
       }
@@ -163,35 +163,37 @@ class BRDParser {
       requirements: this.extractRequirements(content),
       businessRules: this.extractBusinessRules(content),
       userStories: this.extractUserStories(content),
-      acceptanceCriteria: this.extractAcceptanceCriteria(content)
+      acceptanceCriteria: this.extractAcceptanceCriteria(content),
     };
 
     return structured;
   }
 
   extractTitle(content) {
-    const lines = content.split('\n');
+    const lines = content.split("\n");
 
     // Look for title patterns
     for (const line of lines.slice(0, 10)) {
       const trimmed = line.trim();
       if (trimmed.length > 5 && trimmed.length < 100) {
-        if (trimmed.match(/^#\s+/) || // Markdown header
-            trimmed.toUpperCase() === trimmed || // All caps
-            trimmed.includes('BRD') ||
-            trimmed.includes('Business Requirements') ||
-            trimmed.includes('Requirements Document')) {
-          return trimmed.replace(/^#+\s*/, '');
+        if (
+          trimmed.match(/^#\s+/) || // Markdown header
+          trimmed.toUpperCase() === trimmed || // All caps
+          trimmed.includes("BRD") ||
+          trimmed.includes("Business Requirements") ||
+          trimmed.includes("Requirements Document")
+        ) {
+          return trimmed.replace(/^#+\s*/, "");
         }
       }
     }
 
-    return 'Untitled Document';
+    return "Untitled Document";
   }
 
   extractSections(content) {
     const sections = [];
-    const lines = content.split('\n');
+    const lines = content.split("\n");
     let currentSection = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -204,13 +206,13 @@ class BRDParser {
         }
 
         currentSection = {
-          title: line.replace(/^#+\s*/, ''),
-          content: '',
+          title: line.replace(/^#+\s*/, ""),
+          content: "",
           startLine: i,
-          type: this.classifySection(line)
+          type: this.classifySection(line),
         };
       } else if (currentSection && line) {
-        currentSection.content += line + '\n';
+        currentSection.content += line + "\n";
       }
     }
 
@@ -226,24 +228,26 @@ class BRDParser {
     if (line.length < 5 || line.length > 100) return false;
 
     const lowerLine = line.toLowerCase();
-    return this.sectionHeaders.some(header =>
-      lowerLine.includes(header) ||
-      lowerLine.startsWith(header.split(' ')[0])
+    return this.sectionHeaders.some(
+      (header) =>
+        lowerLine.includes(header) ||
+        lowerLine.startsWith(header.split(" ")[0]),
     );
   }
 
   classifySection(title) {
     const lowerTitle = title.toLowerCase();
 
-    if (lowerTitle.includes('requirement')) return 'requirements';
-    if (lowerTitle.includes('business rule')) return 'business_rules';
-    if (lowerTitle.includes('user stor')) return 'user_stories';
-    if (lowerTitle.includes('acceptance')) return 'acceptance_criteria';
-    if (lowerTitle.includes('process') || lowerTitle.includes('workflow')) return 'process';
-    if (lowerTitle.includes('data')) return 'data';
-    if (lowerTitle.includes('integration')) return 'integration';
+    if (lowerTitle.includes("requirement")) return "requirements";
+    if (lowerTitle.includes("business rule")) return "business_rules";
+    if (lowerTitle.includes("user stor")) return "user_stories";
+    if (lowerTitle.includes("acceptance")) return "acceptance_criteria";
+    if (lowerTitle.includes("process") || lowerTitle.includes("workflow"))
+      return "process";
+    if (lowerTitle.includes("data")) return "data";
+    if (lowerTitle.includes("integration")) return "integration";
 
-    return 'general';
+    return "general";
   }
 
   extractRequirements(content) {
@@ -251,16 +255,16 @@ class BRDParser {
     const patterns = [
       /(?:^|\n)\s*(?:REQ|R)[-_]?\d+[:.]\s*(.+)/gim,
       /(?:^|\n)\s*\d+\.\s*(?:The system shall|The application must|The user should)\s*(.+)/gim,
-      /(?:^|\n)\s*-\s*(?:The system shall|The application must|The user should)\s*(.+)/gim
+      /(?:^|\n)\s*-\s*(?:The system shall|The application must|The user should)\s*(.+)/gim,
     ];
 
-    patterns.forEach(pattern => {
+    patterns.forEach((pattern) => {
       let match;
       while ((match = pattern.exec(content)) !== null) {
         requirements.push({
           text: match[1].trim(),
-          type: 'functional',
-          priority: 'medium'
+          type: "functional",
+          priority: "medium",
         });
       }
     });
@@ -273,15 +277,15 @@ class BRDParser {
     const patterns = [
       /(?:^|\n)\s*(?:BR|Rule)[-_]?\d+[:.]\s*(.+)/gim,
       /(?:^|\n)\s*Business Rule:\s*(.+)/gim,
-      /(?:^|\n)\s*-\s*(?:If|When|Unless)\s+(.+)/gim
+      /(?:^|\n)\s*-\s*(?:If|When|Unless)\s+(.+)/gim,
     ];
 
-    patterns.forEach(pattern => {
+    patterns.forEach((pattern) => {
       let match;
       while ((match = pattern.exec(content)) !== null) {
         rules.push({
           text: match[1].trim(),
-          type: 'business_logic'
+          type: "business_logic",
         });
       }
     });
@@ -291,7 +295,8 @@ class BRDParser {
 
   extractUserStories(content) {
     const stories = [];
-    const pattern = /(?:^|\n)\s*(?:As an?|As)\s+(.+?),?\s+(?:I want|I need|I would like)\s+(.+?),?\s+(?:so that|in order to|to)\s+(.+)/gim;
+    const pattern =
+      /(?:^|\n)\s*(?:As an?|As)\s+(.+?),?\s+(?:I want|I need|I would like)\s+(.+?),?\s+(?:so that|in order to|to)\s+(.+)/gim;
 
     let match;
     while ((match = pattern.exec(content)) !== null) {
@@ -299,7 +304,7 @@ class BRDParser {
         actor: match[1].trim(),
         action: match[2].trim(),
         benefit: match[3].trim(),
-        type: 'user_story'
+        type: "user_story",
       });
     }
 
@@ -310,7 +315,7 @@ class BRDParser {
     const criteria = [];
     const patterns = [
       /(?:^|\n)\s*(?:AC|Acceptance Criteria?)[-_]?\d*[:.]\s*(.+)/gim,
-      /(?:^|\n)\s*Given\s+(.+?),?\s+When\s+(.+?),?\s+Then\s+(.+)/gim
+      /(?:^|\n)\s*Given\s+(.+?),?\s+When\s+(.+?),?\s+Then\s+(.+)/gim,
     ];
 
     patterns.forEach((pattern, index) => {
@@ -319,14 +324,14 @@ class BRDParser {
         if (index === 0) {
           criteria.push({
             text: match[1].trim(),
-            type: 'acceptance_criteria'
+            type: "acceptance_criteria",
           });
         } else {
           criteria.push({
             given: match[1].trim(),
             when: match[2].trim(),
             then: match[3].trim(),
-            type: 'gherkin_scenario'
+            type: "gherkin_scenario",
           });
         }
       }
@@ -346,27 +351,31 @@ class BRDParser {
         if (sectionContent.length <= chunkSize) {
           chunks.push({
             content: sectionContent,
-            type: 'section',
+            type: "section",
             section_title: section.title,
             section_type: section.type,
             chunk_index: chunks.length,
-            metadata: { section_index: index }
+            metadata: { section_index: index },
           });
         } else {
           // Split large sections
-          const subChunks = this.splitTextBySize(sectionContent, chunkSize, overlap);
+          const subChunks = this.splitTextBySize(
+            sectionContent,
+            chunkSize,
+            overlap,
+          );
           subChunks.forEach((chunk, subIndex) => {
             chunks.push({
               content: chunk,
-              type: 'section_part',
+              type: "section_part",
               section_title: section.title,
               section_type: section.type,
               chunk_index: chunks.length,
               metadata: {
                 section_index: index,
                 sub_chunk_index: subIndex,
-                total_sub_chunks: subChunks.length
-              }
+                total_sub_chunks: subChunks.length,
+              },
             });
           });
         }
@@ -377,11 +386,11 @@ class BRDParser {
       textChunks.forEach((chunk, index) => {
         chunks.push({
           content: chunk,
-          type: 'text_chunk',
+          type: "text_chunk",
           chunk_index: index,
           metadata: {
-            total_chunks: textChunks.length
-          }
+            total_chunks: textChunks.length,
+          },
         });
       });
     }
@@ -399,8 +408,8 @@ class BRDParser {
 
       // Try to break at paragraph boundaries
       if (end < text.length) {
-        const lastParagraph = chunk.lastIndexOf('\n\n');
-        const lastSentence = chunk.lastIndexOf('.');
+        const lastParagraph = chunk.lastIndexOf("\n\n");
+        const lastSentence = chunk.lastIndexOf(".");
 
         if (lastParagraph > chunk.length * 0.7) {
           chunk = chunk.substring(0, lastParagraph);

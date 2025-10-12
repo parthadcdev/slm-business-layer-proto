@@ -1,6 +1,6 @@
 # Database Directory
 
-This directory contains all database-related SQL files for the SLM Business Service Layer project.
+This directory contains all database-related SQL files for the SLM Business Service Layer project using Neon DB cloud PostgreSQL.
 
 ## File Organization
 
@@ -14,17 +14,27 @@ This directory contains all database-related SQL files for the SLM Business Serv
 ## Database Configuration
 
 - **Database**: `business_app`
-- **User**: `app_user`
-- **Password**: `app_password`
-- **Host**: `localhost` (Docker container)
-- **Port**: `5432`
+- **Provider**: Neon DB (Cloud PostgreSQL)
+- **Version**: PostgreSQL 17.5
+- **Connection**: Via `POSTGRES_URL` environment variable
+- **Security**: SSL/TLS required for all connections
+- **Features**: Automatic scaling, connection pooling, backups
 
 ## File Loading
 
-These files are automatically loaded by PostgreSQL when the Docker container starts via the `docker-entrypoint-initdb.d` mechanism:
+These files are executed directly against Neon DB using the PostgreSQL client:
 
-1. **01-schema.sql** → Creates all tables, views, functions
-2. **02-sample_data.sql** → Loads realistic business data for development and testing
+1. **schema.sql** → Creates all tables, views, functions
+2. **sample_data.sql** → Loads realistic business data for development and testing
+
+### Manual Loading
+```bash
+# Load schema
+psql 'your-neon-connection-string' -f database/schema.sql
+
+# Load sample data
+psql 'your-neon-connection-string' -f database/sample_data.sql
+```
 
 ## Key Features
 
@@ -35,10 +45,11 @@ These files are automatically loaded by PostgreSQL when the Docker container sta
 - **Indexes**: Optimized for common queries
 
 ### Sample Data
-- 20+ customers with realistic profiles
-- 50+ products across multiple categories
-- 30+ orders with order items
-- Multiple warehouses and suppliers
+- 5 customers with realistic profiles
+- 10 products across multiple categories
+- 5 orders with order items (including 1 pending order)
+- 3 warehouses and 4 suppliers
+- 14 inventory items with stock levels
 - Product categories and hierarchies
 
 ## Usage Guidelines
@@ -56,29 +67,32 @@ These files are automatically loaded by PostgreSQL when the Docker container sta
 - Create files without proper documentation
 - Modify schema.sql directly (use migrations instead)
 
-## Docker Integration
+## Cloud Integration
 
-Both `docker-compose.yml` and `docker-compose.simple.yml` mount these files:
+Neon DB provides:
 
-```yaml
-volumes:
-  - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-  - ./database/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
-```
+- **Connection Pooling**: Automatic connection management
+- **Backups**: Automated daily backups with point-in-time recovery
+- **Scaling**: Automatic scaling based on workload
+- **Monitoring**: Built-in performance monitoring and alerts
+- **Security**: SSL/TLS encryption and IP allowlisting
 
 ## Troubleshooting
 
-Use the project's troubleshooting script for database issues:
+Test Neon DB connectivity:
 
 ```bash
-# Check PostgreSQL status
-./scripts/troubleshoot-services.sh postgres-connection
+# Test connection
+psql 'your-neon-connection-string' -c "SELECT version();"
 
-# Run comprehensive diagnostics
-./scripts/troubleshoot-services.sh postgres-diag
+# Check SSL status
+psql 'your-neon-connection-string' -c "SHOW ssl;"
 
-# Fix common database issues
-./scripts/troubleshoot-services.sh postgres-fix
+# Verify environment variable
+echo $POSTGRES_URL
+
+# Test application database health
+curl http://localhost:8001/api/service-status/postgres
 ```
 
 ## Adding New Files
@@ -86,13 +100,13 @@ Use the project's troubleshooting script for database issues:
 To add new database files:
 
 1. Create file in `database/` directory
-2. Use appropriate load order prefix (03-, 04-, etc.)
-3. Add to docker-compose volume mounts
-4. Test with fresh container: `docker-compose down -v && docker-compose up -d postgres`
+2. Use descriptive names (e.g., `migration-001-add-analytics.sql`)
+3. Execute directly against Neon DB: `psql 'connection-string' -f database/new-file.sql`
+4. Test with application to ensure compatibility
 5. Update this README
 
 ---
 
 **Author:** Partha Chandramohan
-**Last Updated:** September 18, 2025 (Baseline v1.0)
-**Status:** ✅ Functional Baseline with Clean Schema and Sample Data
+**Last Updated:** September 27, 2025 (v1.2 - Neon DB Migration)
+**Status:** ✅ Cloud-Ready with Neon DB Integration and Sample Data

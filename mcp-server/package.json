@@ -1,0 +1,50 @@
+{
+  "name": "slm-devops-mcp-server",
+  "version": "1.0.0",
+  "description": "Unified MCP Server for SLM Business Layer DevOps Operations",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "slm-devops-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node test/run-tests.js",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "devops",
+    "slm",
+    "business-layer",
+    "test",
+    "build",
+    "deploy",
+    "git"
+  ],
+  "author": "Partha Chandramohan",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "axios": "^1.4.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.44.0",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/slm-business-layer-proto.git",
+    "directory": "mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/slm-business-layer-proto/issues"
+  },
+  "homepage": "https://github.com/your-org/slm-business-layer-proto#readme"
+}

@@ -1,5 +1,5 @@
 // RAG database query implementation
-const vectorStore = require('../rag/vector-store');
+const vectorStore = require("../rag/vector-store");
 
 class RetrievalService {
   constructor() {
@@ -12,14 +12,14 @@ class RetrievalService {
       const {
         topK = this.defaultTopK,
         threshold = this.similarityThreshold,
-        filters = {}
+        filters = {},
       } = options;
 
       // Retrieve similar documents from vector store
       const results = await vectorStore.search(query, {
         topK,
         threshold,
-        filters
+        filters,
       });
 
       // Process and rank results
@@ -30,8 +30,8 @@ class RetrievalService {
 
       return enrichedResults;
     } catch (error) {
-      console.error('Error retrieving relevant context:', error);
-      throw new Error('Failed to retrieve relevant context');
+      console.error("Error retrieving relevant context:", error);
+      throw new Error("Failed to retrieve relevant context");
     }
   }
 
@@ -40,17 +40,17 @@ class RetrievalService {
       ...result,
       rank: index + 1,
       relevanceScore: result.score,
-      queryContext: this.extractRelevantSnippets(result.content, originalQuery)
+      queryContext: this.extractRelevantSnippets(result.content, originalQuery),
     }));
   }
 
   enrichResults(results) {
-    return results.map(result => ({
+    return results.map((result) => ({
       ...result,
       summary: this.generateSummary(result.content),
       keyTerms: this.extractKeyTerms(result.content),
       documentType: this.classifyDocument(result.metadata),
-      lastUpdated: result.metadata?.lastUpdated || null
+      lastUpdated: result.metadata?.lastUpdated || null,
     }));
   }
 
@@ -58,7 +58,7 @@ class RetrievalService {
     const queryTerms = query.toLowerCase().split(/\s+/);
     const sentences = content.split(/[.!?]+/);
 
-    const scoredSentences = sentences.map(sentence => {
+    const scoredSentences = sentences.map((sentence) => {
       const lowerSentence = sentence.toLowerCase();
       const matchCount = queryTerms.reduce((count, term) => {
         return count + (lowerSentence.includes(term) ? 1 : 0);
@@ -66,15 +66,15 @@ class RetrievalService {
 
       return {
         text: sentence.trim(),
-        score: matchCount / queryTerms.length
+        score: matchCount / queryTerms.length,
       };
     });
 
     return scoredSentences
-      .filter(s => s.score > 0 && s.text.length > 20)
+      .filter((s) => s.score > 0 && s.text.length > 20)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxSnippets)
-      .map(s => s.text);
+      .map((s) => s.text);
   }
 
   generateSummary(content, maxLength = 200) {
@@ -83,47 +83,48 @@ class RetrievalService {
     }
 
     const sentences = content.split(/[.!?]+/);
-    let summary = '';
+    let summary = "";
 
     for (const sentence of sentences) {
       if (summary.length + sentence.length > maxLength) {
         break;
       }
-      summary += sentence.trim() + '. ';
+      summary += sentence.trim() + ". ";
     }
 
-    return summary.trim() || content.substring(0, maxLength) + '...';
+    return summary.trim() || content.substring(0, maxLength) + "...";
   }
 
   extractKeyTerms(content, maxTerms = 5) {
-    const words = content.toLowerCase()
-      .replace(/[^\w\s]/g, '')
+    const words = content
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
       .split(/\s+/)
-      .filter(word => word.length > 3);
+      .filter((word) => word.length > 3);
 
     const frequency = {};
-    words.forEach(word => {
+    words.forEach((word) => {
       frequency[word] = (frequency[word] || 0) + 1;
     });
 
     return Object.entries(frequency)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, maxTerms)
       .map(([word]) => word);
   }
 
   classifyDocument(metadata) {
-    if (!metadata) return 'unknown';
+    if (!metadata) return "unknown";
 
     const type = metadata.documentType || metadata.type;
     if (type) return type;
 
-    const source = metadata.source || '';
-    if (source.includes('brd')) return 'business-requirement';
-    if (source.includes('api')) return 'api-documentation';
-    if (source.includes('policy')) return 'policy';
+    const source = metadata.source || "";
+    if (source.includes("brd")) return "business-requirement";
+    if (source.includes("api")) return "api-documentation";
+    if (source.includes("policy")) return "policy";
 
-    return 'general';
+    return "general";
   }
 
   async getRetrievalStats() {
@@ -133,10 +134,10 @@ class RetrievalService {
         totalDocuments: stats.documentCount,
         totalEmbeddings: stats.embeddingCount,
         lastUpdated: stats.lastUpdated,
-        averageRetrievalTime: stats.averageQueryTime
+        averageRetrievalTime: stats.averageQueryTime,
       };
     } catch (error) {
-      console.error('Error getting retrieval stats:', error);
+      console.error("Error getting retrieval stats:", error);
       return null;
     }
   }

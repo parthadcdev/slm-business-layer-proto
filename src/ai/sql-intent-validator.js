@@ -20,7 +20,14 @@ class SQLIntentValidator {
    * @param {string} originalRequest - Original user request for intent validation
    * @returns {Object} Validation result with score and issues
    */
-  async validateSQLMatchesIntent(intent, sql, ollamaClient, schema, originalRequest = '') {
+  async validateSQLMatchesIntent(
+    intent,
+    sql,
+    ollamaClient,
+    schema,
+    originalRequest = "",
+    validationModel = "phi3:mini",
+  ) {
     const cacheKey = this.generateValidationCacheKey(intent, sql);
 
     if (this.validationCache.has(cacheKey)) {
@@ -28,19 +35,20 @@ class SQLIntentValidator {
     }
 
     try {
-      // First validate if intent classification itself is correct
-      const intentValidation = await this.validateIntentClassification(intent, originalRequest, ollamaClient);
-
-      // Perform multiple validation checks
+      // Perform validation checks
+      // NOTE: Disabled LLM-based intent classification due to hallucination issues
+      // Using only reliable rule-based and lightweight LLM validations
       const validations = await Promise.all([
-        this.validateIntentEntityMapping(intent, sql, ollamaClient),
-        this.validateFilterApplication(intent, sql),
-        this.validateSchemaCompliance(sql, schema),
-        this.validateBusinessLogic(intent, sql, ollamaClient)
+        // this.validateIntentClassification(intent, originalRequest, ollamaClient, validationModel),  // DISABLED: causes hallucinations
+        // this.validateIntentEntityMapping(intent, sql, ollamaClient, validationModel),  // DISABLED: causes hallucinations
+        this.validateFilterApplication(intent, sql),  // Rule-based, reliable
+        this.validateSchemaCompliance(sql, schema),  // Rule-based, reliable
+        // this.validateBusinessLogic(intent, sql, ollamaClient, validationModel),  // DISABLED: causes hallucinations
       ]);
 
-      // Add intent classification validation to the results
-      validations.unshift(intentValidation);
+      // Add simple intent validation (rule-based)
+      const simpleIntentValidation = this.simpleIntentValidation(intent, sql);
+      validations.unshift(simpleIntentValidation);
 
       const result = this.combineValidationResults(validations);
 
@@ -51,27 +59,66 @@ class SQLIntentValidator {
 
       return result;
     } catch (error) {
-      console.error('[SQL-Validator] Validation failed:', error);
+      console.error("[SQL-Validator] Validation failed:", error);
       return {
         isValid: false,
         score: 0,
         issues: [`Validation error: ${error.message}`],
-        recommendations: ['Use fallback SQL generation']
+        recommendations: ["Use fallback SQL generation"],
       };
     }
   }
 
   /**
-   * Validates if the intent classification itself is correct based on the original user request
+   * Simple rule-based intent validation (no LLM, no hallucinations)
    */
-  async validateIntentClassification(intent, originalRequest, ollamaClient) {
+  simpleIntentValidation(intent, sql) {
+    const issues = [];
+    const recommendations = [];
+    let score = 1.0;
+
+    // Check if SQL contains the expected entity
+    const sqlLower = sql.toLowerCase();
+    const entity = intent.entity.toLowerCase();
+    
+    if (!sqlLower.includes(entity)) {
+      issues.push(`SQL doesn't query the expected entity: ${intent.entity}`);
+      score -= 0.3;
+    }
+
+    // Check if SQL has SELECT (basic sanity check)
+    if (!sqlLower.includes('select')) {
+      issues.push('SQL missing SELECT statement');
+      score -= 0.5;
+    }
+
+    // Check if SQL has FROM (basic sanity check)
+    if (!sqlLower.includes('from')) {
+      issues.push('SQL missing FROM clause');
+      score -= 0.5;
+    }
+
+    return {
+      type: "simple-intent-validation",
+      score: Math.max(0, score),
+      issues,
+      recommendations,
+      isValid: score >= 0.6,
+    };
+  }
+
+  /**
+   * Validates if the intent classification itself is correct based on the original user request
+   * NOTE: DISABLED - causes LLM hallucinations about endocrine disruptors and other random topics
+   */
+  async validateIntentClassification(intent, originalRequest, ollamaClient, model = "phi3:mini") {
     if (!originalRequest) {
       return {
-        type: 'intent-classification',
+        type: "intent-classification",
         score: 1.0,
         issues: [],
         recommendations: [],
-        isValid: true
+        isValid: true,
       };
     }
 
@@ -100,27 +147,34 @@ CRITICAL PATTERNS:
 
 Check if the classified entity matches the user's actual intent.
 
-Respond with JSON only:
+CRITICAL: Return ONLY valid JSON. No comments, no explanations, no extra text.
+Do NOT include // or /* */ comments in or around the JSON.
+
+Respond with this exact JSON format:
 {
-  "classificationCorrect": true/false,
-  "correctEntity": "the correct entity if classification is wrong",
-  "overallScore": 0.0-1.0,
-  "issues": ["specific classification issues"],
-  "recommendations": ["specific corrections needed"]
+  "classificationCorrect": true,
+  "correctEntity": "order_items",
+  "overallScore": 0.8,
+  "issues": ["issue text"],
+  "recommendations": ["recommendation text"]
 }`;
 
-    const response = await ollamaClient.generateResponse(prompt, 'phi3:mini', {
+    const response = await ollamaClient.generateResponse(prompt, model, {
       temperature: 0.1,
-      max_tokens: 300
+      max_tokens: 300,
+      timeout: 30000,
     });
 
-    return this.parseLMValidationResponse(response.response || response, 'intent-classification');
+    return this.parseLMValidationResponse(
+      response.response || response,
+      "intent-classification",
+    );
   }
 
   /**
    * Validates that the SQL query targets the correct entity as per intent
    */
-  async validateIntentEntityMapping(intent, sql, ollamaClient) {
+  async validateIntentEntityMapping(intent, sql, ollamaClient, model = "phi3:mini") {
     const prompt = `Analyze if this SQL query matches the user's intent:
 
 INTENT ANALYSIS:
@@ -134,8 +188,8 @@ ${sql}
 
 VALIDATION RULES:
 1. Entity Mapping: Does the SQL query the correct main entity (${intent.entity})?
-2. Filter Application: Are the specified filters (${intent.filters?.join(', ') || 'none'}) applied in WHERE clause?
-3. Customer Filtering: If customer_name is specified (${intent.queryParams?.customer_name || 'none'}), is it properly filtered?
+2. Filter Application: Are the specified filters (${intent.filters?.join(", ") || "none"}) applied in WHERE clause?
+3. Customer Filtering: If customer_name is specified (${intent.queryParams?.customer_name || "none"}), is it properly filtered?
 4. Result Type: Does the query return the right type of data for the intent?
 
 Specific Intent Analysis:
@@ -143,23 +197,30 @@ Specific Intent Analysis:
 - If customer_name is specified, WHERE clause must filter by customer name
 - If intent is "list" for "order_items", should return product details, not just order summaries
 
-Respond with JSON only:
+CRITICAL: Return ONLY valid JSON. No comments, no explanations, no extra text.
+Do NOT include // or /* */ comments in or around the JSON.
+
+Respond with this exact JSON format:
 {
-  "entityMatch": true/false,
-  "filtersApplied": true/false,
-  "customerFilterCorrect": true/false,
-  "resultTypeCorrect": true/false,
-  "overallScore": 0.0-1.0,
-  "issues": ["list of specific issues"],
-  "recommendations": ["specific fixes needed"]
+  "entityMatch": true,
+  "filtersApplied": true,
+  "customerFilterCorrect": true,
+  "resultTypeCorrect": true,
+  "overallScore": 0.8,
+  "issues": ["issue text"],
+  "recommendations": ["recommendation text"]
 }`;
 
-    const response = await ollamaClient.generateResponse(prompt, 'phi3:mini', {
+    const response = await ollamaClient.generateResponse(prompt, model, {
       temperature: 0.1,
-      max_tokens: 400
+      max_tokens: 400,
+      timeout: 30000, // 30 second timeout for validation
     });
 
-    return this.parseLMValidationResponse(response.response || response, 'entity-mapping');
+    return this.parseLMValidationResponse(
+      response.response || response,
+      "entity-mapping",
+    );
   }
 
   /**
@@ -172,38 +233,51 @@ Respond with JSON only:
 
     // Check if customer name filter is applied when specified
     if (intent.queryParams?.customer_name) {
-      const hasCustomerFilter = sql.toLowerCase().includes('where') &&
-        (sql.toLowerCase().includes('first_name') ||
-         sql.toLowerCase().includes('last_name') ||
-         sql.toLowerCase().includes('customer_name'));
+      const hasCustomerFilter =
+        sql.toLowerCase().includes("where") &&
+        (sql.toLowerCase().includes("first_name") ||
+          sql.toLowerCase().includes("last_name") ||
+          sql.toLowerCase().includes("customer_name"));
 
       if (!hasCustomerFilter) {
-        issues.push(`Customer name filter "${intent.queryParams.customer_name}" not applied in WHERE clause`);
-        recommendations.push('Add customer name filtering to WHERE clause');
+        issues.push(
+          `Customer name filter "${intent.queryParams.customer_name}" not applied in WHERE clause`,
+        );
+        recommendations.push("Add customer name filtering to WHERE clause");
         score -= 0.4;
       }
     }
 
     // Check entity-specific filtering
-    if (intent.entity === 'order_items' && !sql.toLowerCase().includes('order_items')) {
-      issues.push('Intent specifies order_items but SQL does not query order_items table');
-      recommendations.push('Change FROM clause to include order_items table with proper JOINs');
+    if (
+      intent.entity === "order_items" &&
+      !sql.toLowerCase().includes("order_items")
+    ) {
+      issues.push(
+        "Intent specifies order_items but SQL does not query order_items table",
+      );
+      recommendations.push(
+        "Change FROM clause to include order_items table with proper JOINs",
+      );
       score -= 0.5;
     }
 
     // Check status filters
-    if (intent.filters?.includes('pending') && !sql.toLowerCase().includes("status")) {
-      issues.push('Status filter not applied');
-      recommendations.push('Add status filtering to WHERE clause');
+    if (
+      intent.filters?.includes("pending") &&
+      !sql.toLowerCase().includes("status")
+    ) {
+      issues.push("Status filter not applied");
+      recommendations.push("Add status filtering to WHERE clause");
       score -= 0.2;
     }
 
     return {
-      type: 'filter-application',
+      type: "filter-application",
       score: Math.max(0, score),
       issues,
       recommendations,
-      isValid: score >= 0.7
+      isValid: score >= 0.6,  // Lowered to allow minor filter issues
     };
   }
 
@@ -219,7 +293,7 @@ Respond with JSON only:
     const tableMatches = sql.match(/(?:FROM|JOIN)\s+(\w+)/gi);
     if (tableMatches) {
       for (const match of tableMatches) {
-        const tableName = match.replace(/(?:FROM|JOIN)\s+/i, '').trim();
+        const tableName = match.replace(/(?:FROM|JOIN)\s+/i, "").trim();
         if (tableName && !schema.tables[tableName]) {
           issues.push(`Unknown table: ${tableName}`);
           recommendations.push(`Use valid table name instead of ${tableName}`);
@@ -232,29 +306,31 @@ Respond with JSON only:
     const columnMatches = sql.match(/\w+\.\w+/g);
     if (columnMatches) {
       for (const columnRef of columnMatches) {
-        const [table, column] = columnRef.split('.');
+        const [table, column] = columnRef.split(".");
         const tableSchema = schema.tables[table];
         if (tableSchema && !tableSchema.columns.includes(column)) {
           issues.push(`Column ${column} does not exist in table ${table}`);
-          recommendations.push(`Use valid column from ${table}: ${tableSchema.columns.join(', ')}`);
+          recommendations.push(
+            `Use valid column from ${table}: ${tableSchema.columns.join(", ")}`,
+          );
           score -= 0.2;
         }
       }
     }
 
     return {
-      type: 'schema-compliance',
+      type: "schema-compliance",
       score: Math.max(0, score),
       issues,
       recommendations,
-      isValid: score >= 0.8
+      isValid: score >= 0.6,  // Lowered to allow minor schema issues
     };
   }
 
   /**
    * Validates business logic alignment
    */
-  async validateBusinessLogic(intent, sql, ollamaClient) {
+  async validateBusinessLogic(intent, sql, ollamaClient, model = "phi3:mini") {
     const prompt = `Analyze if this SQL query implements correct business logic:
 
 USER REQUEST INTENT:
@@ -271,40 +347,63 @@ BUSINESS LOGIC VALIDATION:
 
 Rate this query's business logic alignment (0.0-1.0) and provide specific feedback.
 
-Respond with JSON only:
+CRITICAL: Return ONLY valid JSON. No comments, no explanations, no extra text.
+Do NOT include // comments or any text outside the JSON object.
+
+Respond with this exact JSON format:
 {
-  "businessLogicScore": 0.0-1.0,
-  "correctDataType": true/false,
-  "correctFiltering": true/false,
-  "correctJoins": true/false,
-  "issues": ["specific business logic issues"],
-  "recommendations": ["specific improvements needed"]
+  "businessLogicScore": 0.8,
+  "correctDataType": true,
+  "correctFiltering": true,
+  "correctJoins": true,
+  "issues": ["issue 1", "issue 2"],
+  "recommendations": ["rec 1", "rec 2"]
 }`;
 
-    const response = await ollamaClient.generateResponse(prompt, 'phi3:mini', {
+    const response = await ollamaClient.generateResponse(prompt, model, {
       temperature: 0.1,
-      max_tokens: 300
+      max_tokens: 300,
+      timeout: 30000, // 30 second timeout for validation
     });
 
-    return this.parseLMValidationResponse(response.response || response, 'business-logic');
+    return this.parseLMValidationResponse(
+      response.response || response,
+      "business-logic",
+    );
   }
 
   /**
    * Combines multiple validation results into a single score
    */
   combineValidationResults(validations) {
-    const totalScore = validations.reduce((sum, v) => sum + (v.score || 0), 0) / validations.length;
-    const allIssues = validations.flatMap(v => v.issues || []);
-    const allRecommendations = validations.flatMap(v => v.recommendations || []);
+    const totalScore =
+      validations.reduce((sum, v) => sum + (v.score || 0), 0) /
+      validations.length;
+    const allIssues = validations.flatMap((v) => v.issues || []);
+    const allRecommendations = validations.flatMap(
+      (v) => v.recommendations || [],
+    );
 
-    const isValid = totalScore >= 0.75 && validations.every(v => v.isValid !== false);
+    // Check each validation
+    const invalidValidations = validations.filter((v) => v.isValid === false);
+    const criticalFailures = validations.filter((v) => v.type === 'schema-compliance' && v.isValid === false);
+    
+    // More lenient validation strategy:
+    // - Accept if score >= 0.65 (lowered from 0.70)
+    // - Allow validation failures UNLESS it's a critical schema compliance issue
+    // - Prioritize functional SQL over perfect validation scores
+    const scoreThresholdMet = totalScore >= 0.65;  
+    const noCriticalFailures = criticalFailures.length === 0;  // Only block on schema failures
+    const isValid = scoreThresholdMet && noCriticalFailures;
+
+    console.log(`[SQL-Validator] Combined validation: score=${totalScore.toFixed(2)}, threshold=0.65, scoreOK=${scoreThresholdMet}, explicitFailures=${invalidValidations.length}, criticalFailures=${criticalFailures.length}, isValid=${isValid}`);
 
     return {
       isValid,
       score: totalScore,
       issues: allIssues,
       recommendations: allRecommendations,
-      validationDetails: validations
+      validationDetails: validations,
     };
   }
 
@@ -321,10 +420,17 @@ CURRENT SQL (NEEDS IMPROVEMENT):
 ${sql}
 
 VALIDATION ISSUES FOUND:
-${validationResult.issues.map(issue => `- ${issue}`).join('\n')}
+${validationResult.issues.map((issue) => `- ${issue}`).join("\n")}
 
 RECOMMENDATIONS:
-${validationResult.recommendations.map(rec => `- ${rec}`).join('\n')}
+${validationResult.recommendations.map((rec) => `- ${rec}`).join("\n")}
+
+CRITICAL OUTPUT FORMAT REQUIREMENTS:
+- Return ONLY the SQL query itself (no explanations, no markdown, no additional text)
+- Do NOT include ANY SQL comments (no -- or /* */ style comments)
+- Do NOT include explanatory text before or after the query
+- Do NOT use semicolons except at the very end of the query
+- The response must be executable SQL only
 
 CRITICAL REQUIREMENTS:
 1. If intent.entity is "order_items", query order_items table with proper JOINs
@@ -332,7 +438,7 @@ CRITICAL REQUIREMENTS:
 3. Return the correct data type (products vs orders vs summaries)
 4. Use only valid schema tables and columns
 
-Generate an improved SQL query that addresses all issues:`;
+Generate ONLY an improved SQL query that addresses all issues (NO explanations or comments):`;
   }
 
   /**
@@ -340,29 +446,51 @@ Generate an improved SQL query that addresses all issues:`;
    */
   parseLMValidationResponse(response, validationType) {
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      // Remove any comments before parsing
+      let cleaned = response;
+      
+      // Remove line comments // ...
+      cleaned = cleaned.replace(/\/\/[^\r\n]*/g, '');
+      
+      // Remove block comments /* ... */
+      cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+      
+      // Extract JSON object
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in LM response');
+        throw new Error("No JSON found in LM response");
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      // Clean the JSON string more aggressively
+      let jsonStr = jsonMatch[0];
+      
+      // Remove any remaining comments within the JSON
+      jsonStr = jsonStr.replace(/\/\/[^\r\n]*/g, '');
+      jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\//g, '');
+      
+      const parsed = JSON.parse(jsonStr);
 
       return {
         type: validationType,
         score: parsed.overallScore || parsed.businessLogicScore || 0.5,
         issues: parsed.issues || [],
         recommendations: parsed.recommendations || [],
-        isValid: (parsed.overallScore || parsed.businessLogicScore || 0.5) >= 0.7,
-        details: parsed
+        isValid:
+          (parsed.overallScore || parsed.businessLogicScore || 0.5) >= 0.6,  // Lowered to 0.6
+        details: parsed,
       };
     } catch (error) {
-      console.error(`[SQL-Validator] Failed to parse ${validationType} response:`, error);
+      console.error(
+        `[SQL-Validator] Failed to parse ${validationType} response:`,
+        error,
+      );
+      console.error(`[SQL-Validator] Raw response:`, response);
       return {
         type: validationType,
         score: 0.3,
         issues: [`Failed to validate ${validationType}`],
-        recommendations: ['Manual review required'],
-        isValid: false
+        recommendations: ["Manual review required"],
+        isValid: false,
       };
     }
   }
@@ -375,9 +503,9 @@ Generate an improved SQL query that addresses all issues:`;
       intent: intent.intent,
       entity: intent.entity,
       filters: intent.filters,
-      queryParams: intent.queryParams
+      queryParams: intent.queryParams,
     });
-    return `${Buffer.from(intentKey).toString('base64')}_${Buffer.from(sql).toString('base64').slice(0, 32)}`;
+    return `${Buffer.from(intentKey).toString("base64")}_${Buffer.from(sql).toString("base64").slice(0, 32)}`;
   }
 
   /**

@@ -48,29 +48,6 @@ services:
     networks:
       - slm-network
 
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: slm-postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./database/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
-    environment:
-      - POSTGRES_DB=business_app
-      - POSTGRES_USER=app_user
-      - POSTGRES_PASSWORD=app_password
-      - POSTGRES_HOST_AUTH_METHOD=md5
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user -d business_app"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - slm-network
 
   # Redis Cache and Session Store
   redis:
@@ -104,17 +81,17 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
     environment:
-      - NODE_ENV=development
-      - LOG_LEVEL=info
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - OLLAMA_URL=http://ollama:11434
+      - NODE_ENV=${NODE_ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PORT=8000
+      - JWT_SECRET=${JWT_SECRET}
+      - OLLAMA_URL=http://host.containers.internal:11434
       - CHROMADB_URL=http://chromadb:8000
-      - POSTGRES_URL=postgresql://app_user:app_password@postgres:5432/business_app
+      - POSTGRES_URL=${POSTGRES_URL}
       - REDIS_URL=redis://redis:6379
       - EMBEDDING_SERVICE_URL=http://embedding-service:8001
     depends_on:
       - chromadb
-      - postgres
       - redis
     restart: unless-stopped
     healthcheck:
@@ -325,8 +302,6 @@ services:
       - slm-network
 
 volumes:
-  postgres_data:
-    driver: local
   redis_data:
     driver: local
   prometheus_data:

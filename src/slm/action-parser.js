@@ -2,10 +2,10 @@
 class ActionParser {
   constructor() {
     this.actionTypes = {
-      'database': ['query', 'insert', 'update', 'delete'],
-      'api': ['get', 'post', 'put', 'patch', 'delete'],
-      'business': ['validate', 'calculate', 'process', 'notify'],
-      'workflow': ['start', 'continue', 'pause', 'complete', 'abort']
+      database: ["query", "insert", "update", "delete"],
+      api: ["get", "post", "put", "patch", "delete"],
+      business: ["validate", "calculate", "process", "notify"],
+      workflow: ["start", "continue", "pause", "complete", "abort"],
     };
   }
 
@@ -14,25 +14,26 @@ class ActionParser {
       let actions = [];
 
       if (response.actions && Array.isArray(response.actions)) {
-        actions = response.actions.map(action => this.parseAction(action));
-      } else if (typeof response === 'string') {
+        actions = response.actions.map((action) => this.parseAction(action));
+      } else if (typeof response === "string") {
         actions = this.extractActionsFromText(response);
       }
 
-      return actions.filter(action => action && action.type);
+      return actions.filter((action) => action && action.type);
     } catch (error) {
-      console.error('Error parsing actions:', error);
+      console.error("Error parsing actions:", error);
       return [];
     }
   }
 
   parseAction(actionText) {
-    if (typeof actionText === 'object' && actionText.type) {
+    if (typeof actionText === "object" && actionText.type) {
       return this.validateActionObject(actionText);
     }
 
     // Parse action from text
-    const actionPattern = /^(database|api|business|workflow):\s*(\w+)\s*(?:\((.*?)\))?/i;
+    const actionPattern =
+      /^(database|api|business|workflow):\s*(\w+)\s*(?:\((.*?)\))?/i;
     const match = actionText.match(actionPattern);
 
     if (!match) {
@@ -46,7 +47,7 @@ class ActionParser {
       operation: operation.toLowerCase(),
       parameters: this.parseParameters(params),
       original: actionText,
-      confidence: 0.9
+      confidence: 0.9,
     };
   }
 
@@ -54,109 +55,137 @@ class ActionParser {
     const lowercaseText = text.toLowerCase();
 
     // Database operations
-    if (lowercaseText.includes('retrieve') || lowercaseText.includes('get') || lowercaseText.includes('find')) {
+    if (
+      lowercaseText.includes("retrieve") ||
+      lowercaseText.includes("get") ||
+      lowercaseText.includes("find")
+    ) {
       return {
-        type: 'database',
-        operation: 'query',
+        type: "database",
+        operation: "query",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.7
+        confidence: 0.7,
       };
     }
 
-    if (lowercaseText.includes('create') || lowercaseText.includes('add') || lowercaseText.includes('insert')) {
+    if (
+      lowercaseText.includes("create") ||
+      lowercaseText.includes("add") ||
+      lowercaseText.includes("insert")
+    ) {
       return {
-        type: 'database',
-        operation: 'insert',
+        type: "database",
+        operation: "insert",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.7
+        confidence: 0.7,
       };
     }
 
-    if (lowercaseText.includes('update') || lowercaseText.includes('modify') || lowercaseText.includes('change')) {
+    if (
+      lowercaseText.includes("update") ||
+      lowercaseText.includes("modify") ||
+      lowercaseText.includes("change")
+    ) {
       return {
-        type: 'database',
-        operation: 'update',
+        type: "database",
+        operation: "update",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.7
+        confidence: 0.7,
       };
     }
 
-    if (lowercaseText.includes('delete') || lowercaseText.includes('remove')) {
+    if (lowercaseText.includes("delete") || lowercaseText.includes("remove")) {
       return {
-        type: 'database',
-        operation: 'delete',
+        type: "database",
+        operation: "delete",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.7
+        confidence: 0.7,
       };
     }
 
     // API operations
-    if (lowercaseText.includes('call') || lowercaseText.includes('request') || lowercaseText.includes('api')) {
+    if (
+      lowercaseText.includes("call") ||
+      lowercaseText.includes("request") ||
+      lowercaseText.includes("api")
+    ) {
       return {
-        type: 'api',
-        operation: 'post',
+        type: "api",
+        operation: "post",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.6
+        confidence: 0.6,
       };
     }
 
     // Business operations
-    if (lowercaseText.includes('calculate') || lowercaseText.includes('compute')) {
+    if (
+      lowercaseText.includes("calculate") ||
+      lowercaseText.includes("compute")
+    ) {
       return {
-        type: 'business',
-        operation: 'calculate',
+        type: "business",
+        operation: "calculate",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.8
+        confidence: 0.8,
       };
     }
 
-    if (lowercaseText.includes('validate') || lowercaseText.includes('verify') || lowercaseText.includes('check')) {
+    if (
+      lowercaseText.includes("validate") ||
+      lowercaseText.includes("verify") ||
+      lowercaseText.includes("check")
+    ) {
       return {
-        type: 'business',
-        operation: 'validate',
+        type: "business",
+        operation: "validate",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.8
+        confidence: 0.8,
       };
     }
 
-    if (lowercaseText.includes('notify') || lowercaseText.includes('send') || lowercaseText.includes('alert')) {
+    if (
+      lowercaseText.includes("notify") ||
+      lowercaseText.includes("send") ||
+      lowercaseText.includes("alert")
+    ) {
       return {
-        type: 'business',
-        operation: 'notify',
+        type: "business",
+        operation: "notify",
         parameters: this.extractEntities(text),
         original: text,
-        confidence: 0.7
+        confidence: 0.7,
       };
     }
 
     // Default fallback
     return {
-      type: 'business',
-      operation: 'process',
+      type: "business",
+      operation: "process",
       parameters: { description: text },
       original: text,
-      confidence: 0.3
+      confidence: 0.3,
     };
   }
 
   extractActionsFromText(text) {
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     const actions = [];
 
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed && (
-        trimmed.match(/^\d+\./) ||
-        trimmed.match(/^[-*•]/) ||
-        trimmed.includes(':')
-      )) {
+      if (
+        trimmed &&
+        (trimmed.match(/^\d+\./) ||
+          trimmed.match(/^[-*•]/) ||
+          trimmed.includes(":"))
+      ) {
         const action = this.parseAction(trimmed);
         if (action) {
           actions.push(action);
@@ -173,18 +202,22 @@ class ActionParser {
       operation: actionObj.operation?.toLowerCase(),
       parameters: actionObj.parameters || {},
       original: actionObj.original || JSON.stringify(actionObj),
-      confidence: actionObj.confidence || 0.8
+      confidence: actionObj.confidence || 0.8,
     };
 
     // Validate type
     if (!Object.keys(this.actionTypes).includes(validatedAction.type)) {
-      validatedAction.type = 'business';
+      validatedAction.type = "business";
       validatedAction.confidence *= 0.5;
     }
 
     // Validate operation
-    if (!this.actionTypes[validatedAction.type].includes(validatedAction.operation)) {
-      validatedAction.operation = 'process';
+    if (
+      !this.actionTypes[validatedAction.type].includes(
+        validatedAction.operation,
+      )
+    ) {
+      validatedAction.operation = "process";
       validatedAction.confidence *= 0.7;
     }
 
@@ -196,18 +229,18 @@ class ActionParser {
 
     try {
       // Try JSON parsing first
-      if (paramString.trim().startsWith('{')) {
+      if (paramString.trim().startsWith("{")) {
         return JSON.parse(paramString);
       }
 
       // Parse key-value pairs
       const params = {};
-      const pairs = paramString.split(',');
+      const pairs = paramString.split(",");
 
       for (const pair of pairs) {
-        const [key, value] = pair.split('=').map(s => s.trim());
+        const [key, value] = pair.split("=").map((s) => s.trim());
         if (key && value) {
-          params[key] = value.replace(/['"]/g, '');
+          params[key] = value.replace(/['"]/g, "");
         }
       }
 
@@ -226,7 +259,7 @@ class ActionParser {
       phone: /\b\d{3}-\d{3}-\d{4}\b|\b\(\d{3}\)\s*\d{3}-\d{4}\b/g,
       date: /\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{4}-\d{2}-\d{2}\b/g,
       number: /\b\d+(?:\.\d+)?\b/g,
-      currency: /\$\d+(?:\.\d{2})?/g
+      currency: /\$\d+(?:\.\d{2})?/g,
     };
 
     for (const [type, pattern] of Object.entries(patterns)) {
@@ -241,10 +274,10 @@ class ActionParser {
 
   getActionExecutionOrder(actions) {
     const priorities = {
-      'business': { 'validate': 1, 'calculate': 2, 'process': 3, 'notify': 4 },
-      'database': { 'query': 1, 'insert': 2, 'update': 3, 'delete': 4 },
-      'api': { 'get': 1, 'post': 2, 'put': 3, 'patch': 4, 'delete': 5 },
-      'workflow': { 'start': 1, 'continue': 2, 'pause': 3, 'complete': 4, 'abort': 5 }
+      business: { validate: 1, calculate: 2, process: 3, notify: 4 },
+      database: { query: 1, insert: 2, update: 3, delete: 4 },
+      api: { get: 1, post: 2, put: 3, patch: 4, delete: 5 },
+      workflow: { start: 1, continue: 2, pause: 3, complete: 4, abort: 5 },
     };
 
     return actions.sort((a, b) => {

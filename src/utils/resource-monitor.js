@@ -4,8 +4,8 @@
  * @author Partha Chandramohan
  * @description Comprehensive resource management, cleanup, and monitoring system
  */
-const securityConfig = require('../config/security-config');
-const errorHandler = require('./error-handler');
+const securityConfig = require("../config/security-config");
+const errorHandler = require("./error-handler");
 
 class ResourceMonitor {
   constructor() {
@@ -16,7 +16,7 @@ class ResourceMonitor {
       memory: { usage: 0, peak: 0, limit: 0 },
       connections: { active: 0, peak: 0, limit: 0 },
       caches: { size: 0, hitRate: 0, evictions: 0 },
-      errors: { total: 0, rate: 0, lastHour: 0 }
+      errors: { total: 0, rate: 0, lastHour: 0 },
     };
     this.isShuttingDown = false;
     this.startTime = Date.now();
@@ -26,7 +26,7 @@ class ResourceMonitor {
    * Initialize resource monitoring
    */
   initialize() {
-    console.log('Initializing resource monitor...');
+    console.log("Initializing resource monitor...");
 
     // Start memory monitoring
     this.startMemoryMonitoring();
@@ -46,7 +46,7 @@ class ResourceMonitor {
     // Register cleanup tasks
     this.registerCleanupTasks();
 
-    console.log('Resource monitor initialized successfully');
+    console.log("Resource monitor initialized successfully");
   }
 
   /**
@@ -62,25 +62,30 @@ class ResourceMonitor {
 
       // Set memory limit if not already set
       if (!this.metrics.memory.limit) {
-        this.metrics.memory.limit = securityConfig.get('cache').maxMemoryMB || 500;
+        this.metrics.memory.limit =
+          securityConfig.get("cache").maxMemoryMB || 500;
       }
 
       // Check for memory pressure
       const memoryPressure = totalMB / this.metrics.memory.limit;
       if (memoryPressure > 0.8) {
-        console.warn(`High memory usage: ${totalMB}MB (${Math.round(memoryPressure * 100)}%)`);
+        console.warn(
+          `High memory usage: ${totalMB}MB (${Math.round(memoryPressure * 100)}%)`,
+        );
         this.triggerMemoryCleanup();
       }
 
       if (memoryPressure > 0.95) {
-        console.error(`Critical memory usage: ${totalMB}MB - forcing garbage collection`);
+        console.error(
+          `Critical memory usage: ${totalMB}MB - forcing garbage collection`,
+        );
         if (global.gc) {
           global.gc();
         }
       }
     };
 
-    this.monitoringIntervals.set('memory', setInterval(memoryCheck, 30000)); // Every 30 seconds
+    this.monitoringIntervals.set("memory", setInterval(memoryCheck, 30000)); // Every 30 seconds
     memoryCheck(); // Initial check
   }
 
@@ -93,17 +98,19 @@ class ResourceMonitor {
 
       // Check database connections
       try {
-        const dbAdapter = require('../database/ai-database-adapter');
+        const dbAdapter = require("../database/ai-database-adapter");
         if (dbAdapter.pool) {
           const poolStats = {
             total: dbAdapter.pool.totalCount || 0,
             idle: dbAdapter.pool.idleCount || 0,
-            waiting: dbAdapter.pool.waitingCount || 0
+            waiting: dbAdapter.pool.waitingCount || 0,
           };
           totalConnections += poolStats.total;
 
           if (poolStats.waiting > 5) {
-            console.warn(`Database connection pool under pressure: ${poolStats.waiting} waiting`);
+            console.warn(
+              `Database connection pool under pressure: ${poolStats.waiting} waiting`,
+            );
           }
         }
       } catch (error) {
@@ -111,10 +118,16 @@ class ResourceMonitor {
       }
 
       this.metrics.connections.active = totalConnections;
-      this.metrics.connections.peak = Math.max(this.metrics.connections.peak, totalConnections);
+      this.metrics.connections.peak = Math.max(
+        this.metrics.connections.peak,
+        totalConnections,
+      );
     };
 
-    this.monitoringIntervals.set('connections', setInterval(connectionCheck, 60000)); // Every minute
+    this.monitoringIntervals.set(
+      "connections",
+      setInterval(connectionCheck, 60000),
+    ); // Every minute
     connectionCheck(); // Initial check
   }
 
@@ -130,7 +143,7 @@ class ResourceMonitor {
 
       // Check intent classifier cache
       try {
-        const intentClassifier = require('../ai/intent-classifier');
+        const intentClassifier = require("../ai/intent-classifier");
         const intentStats = intentClassifier.getCacheStats();
         totalCacheSize += intentStats.size || 0;
         totalHits += intentStats.hits || 0;
@@ -142,7 +155,7 @@ class ResourceMonitor {
 
       // Check SQL generator cache
       try {
-        const sqlGenerator = require('../ai/sql-generator');
+        const sqlGenerator = require("../ai/sql-generator");
         const sqlStats = sqlGenerator.getCacheStats();
         totalCacheSize += sqlStats.size || 0;
         totalHits += sqlStats.hits || 0;
@@ -153,16 +166,19 @@ class ResourceMonitor {
       }
 
       this.metrics.caches.size = totalCacheSize;
-      this.metrics.caches.hitRate = totalRequests > 0 ? (totalHits / totalRequests) * 100 : 0;
+      this.metrics.caches.hitRate =
+        totalRequests > 0 ? (totalHits / totalRequests) * 100 : 0;
       this.metrics.caches.evictions = totalEvictions;
 
       // Alert on low cache hit rates
       if (totalRequests > 100 && this.metrics.caches.hitRate < 50) {
-        console.warn(`Low cache hit rate: ${Math.round(this.metrics.caches.hitRate)}%`);
+        console.warn(
+          `Low cache hit rate: ${Math.round(this.metrics.caches.hitRate)}%`,
+        );
       }
     };
 
-    this.monitoringIntervals.set('caches', setInterval(cacheCheck, 120000)); // Every 2 minutes
+    this.monitoringIntervals.set("caches", setInterval(cacheCheck, 120000)); // Every 2 minutes
     cacheCheck(); // Initial check
   }
 
@@ -177,18 +193,21 @@ class ResourceMonitor {
 
         // Calculate error rate (errors per hour)
         const uptimeHours = (Date.now() - this.startTime) / (1000 * 60 * 60);
-        this.metrics.errors.rate = uptimeHours > 0 ? this.metrics.errors.total / uptimeHours : 0;
+        this.metrics.errors.rate =
+          uptimeHours > 0 ? this.metrics.errors.total / uptimeHours : 0;
 
         // Alert on high error rates
         if (this.metrics.errors.rate > 100) {
-          console.error(`High error rate: ${Math.round(this.metrics.errors.rate)} errors/hour`);
+          console.error(
+            `High error rate: ${Math.round(this.metrics.errors.rate)} errors/hour`,
+          );
         }
       } catch (error) {
         // Error handler not available
       }
     };
 
-    this.monitoringIntervals.set('errors', setInterval(errorCheck, 300000)); // Every 5 minutes
+    this.monitoringIntervals.set("errors", setInterval(errorCheck, 300000)); // Every 5 minutes
     errorCheck(); // Initial check
   }
 
@@ -196,12 +215,12 @@ class ResourceMonitor {
    * Trigger memory cleanup when under pressure
    */
   triggerMemoryCleanup() {
-    console.log('Triggering memory cleanup due to pressure...');
+    console.log("Triggering memory cleanup due to pressure...");
 
     // Clear caches
     try {
-      const intentClassifier = require('../ai/intent-classifier');
-      const sqlGenerator = require('../ai/sql-generator');
+      const intentClassifier = require("../ai/intent-classifier");
+      const sqlGenerator = require("../ai/sql-generator");
 
       // Get cache stats before cleanup
       const intentStats = intentClassifier.getCacheStats();
@@ -210,7 +229,9 @@ class ResourceMonitor {
       // Clear half of each cache
       if (intentStats.size > 100) {
         intentClassifier.clearCache();
-        console.log(`Cleared intent classifier cache (${intentStats.size} entries)`);
+        console.log(
+          `Cleared intent classifier cache (${intentStats.size} entries)`,
+        );
       }
 
       if (sqlStats.size > 50) {
@@ -218,13 +239,13 @@ class ResourceMonitor {
         console.log(`Cleared SQL generator cache (${sqlStats.size} entries)`);
       }
     } catch (error) {
-      console.warn('Error during cache cleanup:', error.message);
+      console.warn("Error during cache cleanup:", error.message);
     }
 
     // Force garbage collection if available
     if (global.gc) {
       global.gc();
-      console.log('Triggered garbage collection');
+      console.log("Triggered garbage collection");
     }
   }
 
@@ -233,23 +254,23 @@ class ResourceMonitor {
    */
   registerCleanupTasks() {
     // Database cleanup
-    this.cleanupTasks.set('database', async () => {
+    this.cleanupTasks.set("database", async () => {
       try {
-        const dbAdapter = require('../database/ai-database-adapter');
+        const dbAdapter = require("../database/ai-database-adapter");
         if (dbAdapter.close) {
           await dbAdapter.close();
-          console.log('Database connections closed');
+          console.log("Database connections closed");
         }
       } catch (error) {
-        console.error('Error closing database:', error.message);
+        console.error("Error closing database:", error.message);
       }
     });
 
     // Cache cleanup
-    this.cleanupTasks.set('caches', async () => {
+    this.cleanupTasks.set("caches", async () => {
       try {
-        const intentClassifier = require('../ai/intent-classifier');
-        const sqlGenerator = require('../ai/sql-generator');
+        const intentClassifier = require("../ai/intent-classifier");
+        const sqlGenerator = require("../ai/sql-generator");
 
         if (intentClassifier.clearCache) {
           intentClassifier.clearCache();
@@ -257,42 +278,42 @@ class ResourceMonitor {
         if (sqlGenerator.clearCache) {
           sqlGenerator.clearCache();
         }
-        console.log('Caches cleared');
+        console.log("Caches cleared");
       } catch (error) {
-        console.error('Error clearing caches:', error.message);
+        console.error("Error clearing caches:", error.message);
       }
     });
 
     // LRU cache cleanup
-    this.cleanupTasks.set('lru_caches', async () => {
+    this.cleanupTasks.set("lru_caches", async () => {
       try {
         // Find and destroy any LRU cache instances
-        const intentClassifier = require('../ai/intent-classifier');
+        const intentClassifier = require("../ai/intent-classifier");
         if (intentClassifier.cache && intentClassifier.cache.destroy) {
           intentClassifier.cache.destroy();
         }
 
-        const sqlGenerator = require('../ai/sql-generator');
+        const sqlGenerator = require("../ai/sql-generator");
         if (sqlGenerator.queryCache && sqlGenerator.queryCache.destroy) {
           sqlGenerator.queryCache.destroy();
         }
 
-        console.log('LRU caches destroyed');
+        console.log("LRU caches destroyed");
       } catch (error) {
-        console.error('Error destroying LRU caches:', error.message);
+        console.error("Error destroying LRU caches:", error.message);
       }
     });
 
     // Parallel processor cleanup
-    this.cleanupTasks.set('parallel_processor', async () => {
+    this.cleanupTasks.set("parallel_processor", async () => {
       try {
-        const parallelProcessor = require('./parallel-processor');
+        const parallelProcessor = require("./parallel-processor");
         if (parallelProcessor.gracefulShutdown) {
           await parallelProcessor.gracefulShutdown();
-          console.log('Parallel processor shutdown complete');
+          console.log("Parallel processor shutdown complete");
         }
       } catch (error) {
-        console.error('Error shutting down parallel processor:', error.message);
+        console.error("Error shutting down parallel processor:", error.message);
       }
     });
   }
@@ -303,7 +324,7 @@ class ResourceMonitor {
   setupShutdownHandlers() {
     const gracefulShutdown = async (signal) => {
       if (this.isShuttingDown) {
-        console.log('Shutdown already in progress...');
+        console.log("Shutdown already in progress...");
         return;
       }
 
@@ -322,39 +343,40 @@ class ResourceMonitor {
         for (const [name, task] of this.cleanupTasks.entries()) {
           console.log(`Starting cleanup: ${name}`);
           cleanupPromises.push(
-            task().catch(error => console.error(`Cleanup failed for ${name}:`, error.message))
+            task().catch((error) =>
+              console.error(`Cleanup failed for ${name}:`, error.message),
+            ),
           );
         }
 
         // Wait for all cleanup tasks with timeout
         await Promise.race([
           Promise.all(cleanupPromises),
-          new Promise(resolve => setTimeout(resolve, 10000)) // 10 second timeout
+          new Promise((resolve) => setTimeout(resolve, 10000)), // 10 second timeout
         ]);
 
-        console.log('Graceful shutdown complete');
+        console.log("Graceful shutdown complete");
         process.exit(0);
-
       } catch (error) {
-        console.error('Error during graceful shutdown:', error.message);
+        console.error("Error during graceful shutdown:", error.message);
         process.exit(1);
       }
     };
 
     // Handle different shutdown signals
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-    process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+    process.on("SIGUSR2", () => gracefulShutdown("SIGUSR2")); // nodemon restart
 
     // Handle uncaught exceptions
-    process.on('uncaughtException', (error) => {
-      console.error('Uncaught Exception:', error);
-      gracefulShutdown('uncaughtException');
+    process.on("uncaughtException", (error) => {
+      console.error("Uncaught Exception:", error);
+      gracefulShutdown("uncaughtException");
     });
 
-    process.on('unhandledRejection', (reason, promise) => {
-      console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-      gracefulShutdown('unhandledRejection');
+    process.on("unhandledRejection", (reason, promise) => {
+      console.error("Unhandled Rejection at:", promise, "reason:", reason);
+      gracefulShutdown("unhandledRejection");
     });
   }
 
@@ -365,7 +387,7 @@ class ResourceMonitor {
     return {
       ...this.metrics,
       uptime: Date.now() - this.startTime,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 
@@ -374,26 +396,26 @@ class ResourceMonitor {
    */
   async getHealthStatus() {
     const health = {
-      status: 'healthy',
+      status: "healthy",
       timestamp: new Date().toISOString(),
       uptime: Date.now() - this.startTime,
       metrics: this.getMetrics(),
-      services: {}
+      services: {},
     };
 
     // Check database health
     try {
-      const dbAdapter = require('../database/ai-database-adapter');
+      const dbAdapter = require("../database/ai-database-adapter");
       const dbHealth = await dbAdapter.checkHealth();
       health.services.database = dbHealth;
     } catch (error) {
       health.services.database = { healthy: false, error: error.message };
-      health.status = 'degraded';
+      health.status = "degraded";
     }
 
     // Check Ollama health
     try {
-      const ollamaClient = require('../slm/ollama-client');
+      const ollamaClient = require("../slm/ollama-client");
       const ollamaHealth = await ollamaClient.checkHealth();
       health.services.ollama = ollamaHealth;
     } catch (error) {
@@ -401,16 +423,17 @@ class ResourceMonitor {
     }
 
     // Check memory pressure
-    const memoryPressure = this.metrics.memory.usage / this.metrics.memory.limit;
+    const memoryPressure =
+      this.metrics.memory.usage / this.metrics.memory.limit;
     if (memoryPressure > 0.9) {
-      health.status = 'critical';
+      health.status = "critical";
     } else if (memoryPressure > 0.8) {
-      health.status = 'degraded';
+      health.status = "degraded";
     }
 
     // Check error rate
     if (this.metrics.errors.rate > 100) {
-      health.status = 'degraded';
+      health.status = "degraded";
     }
 
     return health;
@@ -419,8 +442,8 @@ class ResourceMonitor {
   /**
    * Force cleanup of specific resource type
    */
-  async forceCleanup(resourceType = 'all') {
-    if (resourceType === 'all') {
+  async forceCleanup(resourceType = "all") {
+    if (resourceType === "all") {
       for (const [name, task] of this.cleanupTasks.entries()) {
         try {
           await task();
@@ -434,7 +457,10 @@ class ResourceMonitor {
         await this.cleanupTasks.get(resourceType)();
         console.log(`Force cleanup completed: ${resourceType}`);
       } catch (error) {
-        console.error(`Force cleanup failed for ${resourceType}:`, error.message);
+        console.error(
+          `Force cleanup failed for ${resourceType}:`,
+          error.message,
+        );
       }
     } else {
       throw new Error(`Unknown resource type: ${resourceType}`);
@@ -449,7 +475,7 @@ class ResourceMonitor {
       clearInterval(interval);
     }
     this.monitoringIntervals.clear();
-    console.log('Resource monitoring stopped');
+    console.log("Resource monitoring stopped");
   }
 }
 

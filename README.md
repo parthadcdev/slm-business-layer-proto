@@ -4,6 +4,15 @@
 
 A revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system. This prototype leverages Retrieval-Augmented Generation (RAG) with business requirement documents (BRDs) to eliminate manual coding of business logic.
 
+## 🚨 IMPORTANT: Database Configuration
+
+**THIS PROJECT USES NEONDB (CLOUD POSTGRESQL) - NOT LOCAL DATABASE**
+
+- ✅ **Database:** NeonDB cloud-hosted PostgreSQL
+- ❌ **NOT using:** Local PostgreSQL, Docker PostgreSQL, or Podman PostgreSQL
+- 📋 **Required:** POSTGRES_URL environment variable with NeonDB connection string
+- 📚 **Setup Guide:** See [docs/NEONDB_SETUP.md](docs/NEONDB_SETUP.md)
+
 ## 🚀 Architecture Overview
 
 This project implements a paradigm-shifting approach to business application development:
@@ -22,7 +31,8 @@ This project implements a paradigm-shifting approach to business application dev
 ### Technology Stack
 
 - **SLM**: Ollama with Llama 3.2, Mistral, or CodeLlama models
-- **Vector Database**: ChromaDB for local deployment
+- **Database**: NeonDB (Cloud-hosted PostgreSQL)
+- **Vector Database**: ChromaDB for RAG operations
 - **Orchestration**: Node.js with Express.js
 - **Inference Layer**: Containerized microservices
 - **API Gateway**: Traefik for reverse proxy and routing
@@ -49,10 +59,15 @@ This project implements a paradigm-shifting approach to business application dev
 ```bash
 # Required tools
 curl -fsSL https://ollama.com/install.sh | sh  # Ollama
-docker --version && docker-compose --version   # Docker
+docker --version && docker-compose --version   # Docker (optional, for ChromaDB)
 python3 --version && pip --version             # Python 3.8+
 node --version && npm --version                # Node.js 16+
 ```
+
+**Required Services:**
+- **NeonDB Account**: Sign up at [https://neon.tech](https://neon.tech) for cloud PostgreSQL
+- **Ollama**: Local LLM inference
+- **ChromaDB**: Vector database for RAG (can run locally or in Docker)
 
 ### Installation
 
@@ -64,12 +79,36 @@ node --version && npm --version                # Node.js 16+
    ./scripts/setup-local.sh
    ```
 
-2. **Start services using Docker Compose** (Recommended)
+2. **Configure Environment Variables**
    ```bash
-   docker-compose up -d
+   # Copy the example environment file
+   cp env.example .env
+   
+   # Edit .env and set your NeonDB connection string
+   # POSTGRES_URL=postgresql://user:password@your-neon-host.neon.tech/database?sslmode=require
+   # JWT_SECRET=your-secret-key-minimum-32-characters
+   nano .env
    ```
 
-3. **Or start services individually**
+3. **Setup NeonDB Database**
+   ```bash
+   # Get your connection string from https://console.neon.tech
+   # Then load the schema and sample data:
+   psql 'your-neon-connection-string' -f database/schema.sql
+   psql 'your-neon-connection-string' -f database/sample_data.sql
+   ```
+
+4. **Start ChromaDB** (Optional - can run locally or in Docker)
+   ```bash
+   # Option A: Start ChromaDB with Docker
+   docker-compose up -d chromadb
+   
+   # Option B: Run ChromaDB locally
+   pip install chromadb
+   chroma run --path ./chroma_data
+   ```
+
+5. **Start Ollama and pull models**
    ```bash
    # Terminal 1: Start Ollama
    ollama serve
@@ -77,23 +116,31 @@ node --version && npm --version                # Node.js 16+
    # Terminal 2: Pull models
    ollama pull llama3.2:3b
    ollama pull mistral:7b
-
-   # Terminal 3: Start orchestration service
-   npm run dev
+   ollama pull phi3:mini
    ```
 
-4. **Initialize RAG database**
+6. **Initialize RAG database**
    ```bash
+   source venv/bin/activate
    python3 scripts/init-rag-db.py
+   ```
+
+7. **Start the orchestration service**
+   ```bash
+   # Make sure to set environment variables
+   export JWT_SECRET="your-secret-key-minimum-32-characters"
+   export POSTGRES_URL="your-neon-connection-string"
+   npm run dev
    ```
 
 ### Service URLs
 
 - **Main API**: http://localhost:8001
 - **Ollama API**: http://localhost:11434
-- **ChromaDB**: http://localhost:8000
-- **Traefik Dashboard**: http://localhost:8080
-- **Grafana**: http://localhost:3000 (with monitoring profile)
+- **ChromaDB**: http://localhost:8000 (if running locally or via Docker)
+- **NeonDB**: Access via your Neon Console at https://console.neon.tech
+- **Traefik Dashboard**: http://localhost:8080 (optional)
+- **Grafana**: http://localhost:3000 (optional, with monitoring profile)
 
 ## 📖 Usage Examples
 

@@ -4,23 +4,23 @@
  * @author Partha Chandramohan
  * @description AI-powered intent understanding with caching and fallback mechanisms
  */
-const LRUCache = require('../utils/lru-cache');
-const securityConfig = require('../config/security-config');
+const LRUCache = require("../utils/lru-cache");
+const securityConfig = require("../config/security-config");
 
 class IntentClassifier {
   constructor() {
-    const cacheConfig = securityConfig.get('cache');
+    const cacheConfig = securityConfig.get("cache");
 
     // Enhanced caching with separate cache for LM responses
     this.cache = new LRUCache(
       cacheConfig.maxSize || 1000,
-      cacheConfig.defaultTTL || 5 * 60 * 1000 // 5 minutes
+      cacheConfig.defaultTTL || 5 * 60 * 1000, // 5 minutes
     );
 
     // Smart cache for high-quality LM responses (longer TTL)
     this.smartCache = new LRUCache(
       500, // Smaller size for high-quality responses
-      30 * 60 * 1000 // 30 minutes for confidence >= 0.9
+      30 * 60 * 1000, // 30 minutes for confidence >= 0.9
     );
 
     // Health monitoring
@@ -32,7 +32,7 @@ class IntentClassifier {
       totalRequests: 0,
       lastLMSuccess: null,
       lastLMFailure: null,
-      consecutiveFailures: 0
+      consecutiveFailures: 0,
     };
 
     // LM health status
@@ -48,7 +48,7 @@ class IntentClassifier {
     // Check smart cache first (high-quality responses)
     const smartCached = this.smartCache.get(cacheKey);
     if (smartCached) {
-      console.log('[SMART-CACHE] High-quality intent classification cache hit');
+      console.log("[SMART-CACHE] High-quality intent classification cache hit");
       this.healthMetrics.cacheHitCount++;
       return smartCached;
     }
@@ -56,7 +56,7 @@ class IntentClassifier {
     // Check regular cache
     const cached = this.cache.get(cacheKey);
     if (cached) {
-      console.log('[CACHE] Intent classification cache hit');
+      console.log("[CACHE] Intent classification cache hit");
       this.healthMetrics.cacheHitCount++;
       return cached;
     }
@@ -75,7 +75,7 @@ class IntentClassifier {
 
         // Smart caching: cache high-confidence responses longer
         if (intent.confidence >= 0.9) {
-          console.log('[SMART-CACHE] Caching high-confidence response');
+          console.log("[SMART-CACHE] Caching high-confidence response");
           this.smartCache.set(cacheKey, intent);
         } else {
           this.cache.set(cacheKey, intent);
@@ -83,12 +83,15 @@ class IntentClassifier {
 
         return intent;
       } catch (error) {
-        console.log('[LM-HEALTH] LM classification failed, using fallback:', error.message);
+        console.log(
+          "[LM-HEALTH] LM classification failed, using fallback:",
+          error.message,
+        );
         this.updateHealthMetrics(false);
         return this.classifyWithFallback(userRequest);
       }
     } else {
-      console.log('[LM-HEALTH] LM unhealthy, using fallback directly');
+      console.log("[LM-HEALTH] LM unhealthy, using fallback directly");
       return this.classifyWithFallback(userRequest);
     }
   }
@@ -96,12 +99,15 @@ class IntentClassifier {
   async classifyWithLM(userRequest, ollamaClient) {
     const prompt = this.buildStructuredIntentPrompt(userRequest);
 
-    const response = await ollamaClient.generateResponse(prompt, 'phi3:mini', {
+    const response = await ollamaClient.generateResponse(prompt, "phi3:mini", {
       temperature: 0.1, // Low temperature for consistent classification
-      max_tokens: 300
+      max_tokens: 300,
     });
 
-    return this.parseLMIntentResponse(response.response || response, userRequest);
+    return this.parseLMIntentResponse(
+      response.response || response,
+      userRequest,
+    );
   }
 
   buildIntentClassificationPrompt(userRequest) {
@@ -215,6 +221,9 @@ Examples:
 "Show 5 pending orders" → {"intent":"list","entity":"orders","filters":{"status":"pending"},"sort":"order_date","limit":5,"confidence":0.95}
 "Count premium customers" → {"intent":"count","entity":"customers","filters":{"customer_type":"premium"},"sort":null,"limit":null,"confidence":0.9}
 "Who are the top customers?" → {"intent":"analyze","entity":"customers","filters":{},"sort":"total_spent","limit":null,"confidence":0.85}
+"Who is the most valuable customer?" → {"intent":"analyze","entity":"customers","filters":{},"sort":"total_spent","limit":1,"confidence":0.95}
+"Who is most valuable customer" → {"intent":"analyze","entity":"customers","filters":{},"sort":"total_spent","limit":1,"confidence":0.95}
+"Most loyal customer" → {"intent":"analyze","entity":"customers","filters":{},"sort":"total_orders","limit":1,"confidence":0.95}
 
 Respond with JSON only, no explanations:`;
   }
@@ -224,14 +233,14 @@ Respond with JSON only, no explanations:`;
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error("No JSON found in response");
       }
 
       const intent = JSON.parse(jsonMatch[0]);
 
       // Validate required fields
       if (!intent.intent || !intent.entity) {
-        throw new Error('Missing required fields in intent');
+        throw new Error("Missing required fields in intent");
       }
 
       // Transform enhanced format to backward-compatible format
@@ -245,23 +254,26 @@ Respond with JSON only, no explanations:`;
 
         // Enhanced fields for advanced processing
         secondary_entities: intent.secondary_entities || [],
-        business_logic: intent.business_logic || '',
+        business_logic: intent.business_logic || "",
         sort_direction: intent.sort_direction || null,
         time_scope: intent.time_scope || null,
-        query_complexity: intent.query_complexity || 'simple',
+        query_complexity: intent.query_complexity || "simple",
         requires_joins: intent.requires_joins || false,
-        business_context: intent.business_context || '',
+        business_context: intent.business_context || "",
 
         // Detect least queries from sort direction or business logic
-        isLeastQuery: intent.sort_direction === 'ASC' ||
-                     (intent.business_logic && intent.business_logic.toLowerCase().includes('least')) ||
-                     (intent.business_context && intent.business_context.toLowerCase().includes('least'))
+        isLeastQuery:
+          intent.sort_direction === "ASC" ||
+          (intent.business_logic &&
+            intent.business_logic.toLowerCase().includes("least")) ||
+          (intent.business_context &&
+            intent.business_context.toLowerCase().includes("least")),
       };
 
       return transformedIntent;
     } catch (error) {
-      console.error('Failed to parse intent response:', error);
-      throw new Error('Invalid intent response format');
+      console.error("Failed to parse intent response:", error);
+      throw new Error("Invalid intent response format");
     }
   }
 
@@ -271,17 +283,17 @@ Respond with JSON only, no explanations:`;
       console.log(`[LM-PARSER] Raw response:`, response);
 
       // Extract JSON from response - use proper balance counting
-      let jsonStart = response.indexOf('{');
+      const jsonStart = response.indexOf("{");
       if (jsonStart === -1) {
-        throw new Error('No JSON found in LM response');
+        throw new Error("No JSON found in LM response");
       }
 
       let braceCount = 0;
       let jsonEnd = jsonStart;
 
       for (let i = jsonStart; i < response.length; i++) {
-        if (response[i] === '{') braceCount++;
-        if (response[i] === '}') braceCount--;
+        if (response[i] === "{") braceCount++;
+        if (response[i] === "}") braceCount--;
         if (braceCount === 0) {
           jsonEnd = i;
           break;
@@ -292,9 +304,9 @@ Respond with JSON only, no explanations:`;
 
       // Clean and normalize JSON string
       jsonString = jsonString
-        .replace(/\n/g, ' ')        // Replace newlines with spaces
-        .replace(/\s+/g, ' ')       // Normalize multiple spaces
-        .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+        .replace(/\n/g, " ") // Replace newlines with spaces
+        .replace(/\s+/g, " ") // Normalize multiple spaces
+        .replace(/,(\s*[}\]])/g, "$1") // Remove trailing commas
         .trim();
 
       console.log(`[LM-PARSER] Cleaned JSON:`, jsonString);
@@ -303,7 +315,9 @@ Respond with JSON only, no explanations:`;
 
       // Validate required fields
       if (!parsed.intent || !parsed.entity) {
-        throw new Error('Missing required fields (intent, entity) in LM response');
+        throw new Error(
+          "Missing required fields (intent, entity) in LM response",
+        );
       }
 
       // Transform LM response to backward-compatible format
@@ -319,15 +333,16 @@ Respond with JSON only, no explanations:`;
         queryParams: {},
 
         // Store original request for validation
-        originalRequest: originalRequest
+        originalRequest: originalRequest,
       };
 
       // Convert LM filters object to backward-compatible format
       if (parsed.filters) {
         // Handle customer_name
         if (parsed.filters.customer_name) {
-          transformedIntent.queryParams.customer_name = parsed.filters.customer_name;
-          transformedIntent.filters.push('customer_filter');
+          transformedIntent.queryParams.customer_name =
+            parsed.filters.customer_name;
+          transformedIntent.filters.push("customer_filter");
         }
 
         // Handle status
@@ -338,52 +353,81 @@ Respond with JSON only, no explanations:`;
 
         // Handle customer_type
         if (parsed.filters.customer_type) {
-          transformedIntent.queryParams.customer_type = parsed.filters.customer_type;
+          transformedIntent.queryParams.customer_type =
+            parsed.filters.customer_type;
           transformedIntent.filters.push(parsed.filters.customer_type);
         }
 
         // Handle product_name
         if (parsed.filters.product_name) {
-          transformedIntent.queryParams.product_name = parsed.filters.product_name;
-          transformedIntent.filters.push('product_filter');
+          transformedIntent.queryParams.product_name =
+            parsed.filters.product_name;
+          transformedIntent.filters.push("product_filter");
         }
       }
 
       console.log(`[LM-PARSER] Transformed intent:`, transformedIntent);
       return transformedIntent;
-
     } catch (error) {
-      console.error('[LM-PARSER] Failed to parse LM response:', error.message);
-      console.error('[LM-PARSER] Raw response was:', response);
+      console.error("[LM-PARSER] Failed to parse LM response:", error.message);
+      console.error("[LM-PARSER] Raw response was:", response);
       throw new Error(`Invalid LM response format: ${error.message}`);
     }
   }
 
   classifyWithFallback(userRequest) {
-    console.log('[FALLBACK] Using simplified fallback classification for:', userRequest);
+    console.log(
+      "[FALLBACK] Using simplified fallback classification for:",
+      userRequest,
+    );
 
     const requestLower = userRequest.toLowerCase();
 
     // Simple intent classification
-    let intent = 'list';
-    if (requestLower.includes('count') || requestLower.includes('how many')) {
-      intent = 'count';
-    } else if (requestLower.includes('search') || requestLower.includes('find')) {
-      intent = 'search';
-    } else if (requestLower.includes('analyze') || requestLower.includes('top') || requestLower.includes('best')) {
-      intent = 'analyze';
+    let intent = "list";
+    if (requestLower.includes("count") || requestLower.includes("how many")) {
+      intent = "count";
+    } else if (
+      requestLower.includes("search") ||
+      requestLower.includes("find")
+    ) {
+      intent = "search";
+    } else if (
+      requestLower.includes("analyze") ||
+      requestLower.includes("top") ||
+      requestLower.includes("best") ||
+      requestLower.includes("most") ||
+      requestLower.includes("highest") ||
+      requestLower.includes("lowest") ||
+      requestLower.includes("valuable") ||
+      requestLower.includes("loyal") ||
+      requestLower.includes("who is")
+    ) {
+      intent = "analyze";
     }
 
     // Simple entity classification with special handling for "what did [name] order" queries
-    let entity = 'orders';
-    if (requestLower.includes('customer')) entity = 'customers';
-    else if (requestLower.includes('product')) entity = 'products';
-    else if (requestLower.includes('inventory') || requestLower.includes('stock')) entity = 'inventory';
-    else if (requestLower.includes('supplier')) entity = 'suppliers';
+    let entity = "orders";
+    if (
+      requestLower.includes("customer") ||
+      requestLower.includes("valuable") ||
+      requestLower.includes("loyal")
+    ) {
+      entity = "customers";
+    } else if (requestLower.includes("product")) {
+      entity = "products";
+    } else if (
+      requestLower.includes("inventory") ||
+      requestLower.includes("stock")
+    ) {
+      entity = "inventory";
+    } else if (requestLower.includes("supplier")) {
+      entity = "suppliers";
+    }
 
     // Special case: "what did [name] order/buy" should return order items (products)
     if (requestLower.match(/(what did|what has).+(order|buy|purchase)/i)) {
-      entity = 'order_items';
+      entity = "order_items";
     }
 
     // Basic filter and parameter extraction
@@ -391,20 +435,32 @@ Respond with JSON only, no explanations:`;
     const queryParams = this.extractQueryParams(requestLower, userRequest);
 
     // Extract status
-    if (requestLower.includes('pending')) {
-      filters.push('pending');
-      queryParams.status = 'pending';
+    if (requestLower.includes("pending")) {
+      filters.push("pending");
+      queryParams.status = "pending";
+    }
+
+    // Set limit = 1 for superlative queries (most, highest, best, etc.)
+    let limit = null;
+    if (
+      intent === "analyze" &&
+      (requestLower.includes("most valuable") ||
+        requestLower.includes("most loyal") ||
+        requestLower.includes("who is") ||
+        requestLower.match(/\bthe\s+(most|highest|best|top|greatest)\b/))
+    ) {
+      limit = 1;
     }
 
     return {
       intent,
       entity,
       filters,
-      limit: null,
+      limit,
       sort: this.getDefaultSort(entity),
       confidence: 0.6, // Lower confidence for fallback
       queryParams,
-      originalRequest: userRequest
+      originalRequest: userRequest,
     };
   }
 
@@ -415,7 +471,9 @@ Respond with JSON only, no explanations:`;
     console.log(`[DEBUG] Extracting params from: "${originalRequest}"`);
 
     // Try the most specific pattern first: "what did [full name] order/buy"
-    let match = originalRequest.match(/what did\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:order|buy|purchase)/i);
+    const match = originalRequest.match(
+      /what did\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:order|buy|purchase)/i,
+    );
     if (match && match[1]) {
       params.customer_name = match[1].trim();
       console.log(`[DEBUG] Found customer name: ${params.customer_name}`);
@@ -426,7 +484,7 @@ Respond with JSON only, no explanations:`;
         /(?:show me what)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:order|buy|purchase)/i,
         /(?:orders? (?:for|from|by)|purchases? (?:for|from|by))\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
         /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:buy|bought|order|purchase|orders?)/i,
-        /(?:customer|client)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i
+        /(?:customer|client)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
       ];
 
       for (const pattern of customerPatterns) {
@@ -442,7 +500,7 @@ Respond with JSON only, no explanations:`;
     // Extract product names
     const productPatterns = [
       /(?:product|item)\s+([a-zA-Z0-9\s]+)/i,
-      /(?:show|find|get)\s+([a-zA-Z0-9\s]+)\s+(?:products?|items?)/i
+      /(?:show|find|get)\s+([a-zA-Z0-9\s]+)\s+(?:products?|items?)/i,
     ];
 
     for (const pattern of productPatterns) {
@@ -454,17 +512,17 @@ Respond with JSON only, no explanations:`;
     }
 
     // Extract status values
-    if (requestLower.includes('pending')) params.status = 'pending';
-    else if (requestLower.includes('confirmed')) params.status = 'confirmed';
-    else if (requestLower.includes('processing')) params.status = 'processing';
-    else if (requestLower.includes('shipped')) params.status = 'shipped';
-    else if (requestLower.includes('delivered')) params.status = 'delivered';
-    else if (requestLower.includes('cancelled')) params.status = 'cancelled';
+    if (requestLower.includes("pending")) params.status = "pending";
+    else if (requestLower.includes("confirmed")) params.status = "confirmed";
+    else if (requestLower.includes("processing")) params.status = "processing";
+    else if (requestLower.includes("shipped")) params.status = "shipped";
+    else if (requestLower.includes("delivered")) params.status = "delivered";
+    else if (requestLower.includes("cancelled")) params.status = "cancelled";
 
     // Extract customer type
-    if (requestLower.includes('premium')) params.customer_type = 'premium';
-    else if (requestLower.includes('regular')) params.customer_type = 'regular';
-    else if (requestLower.includes('vip')) params.customer_type = 'vip';
+    if (requestLower.includes("premium")) params.customer_type = "premium";
+    else if (requestLower.includes("regular")) params.customer_type = "regular";
+    else if (requestLower.includes("vip")) params.customer_type = "vip";
 
     console.log(`[DEBUG] Final extracted params:`, params);
     return params;
@@ -473,20 +531,42 @@ Respond with JSON only, no explanations:`;
   extractLimit(requestLower) {
     // Number words mapping
     const numberWords = {
-      'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-      'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-      'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-      'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
+      eleven: 11,
+      twelve: 12,
+      thirteen: 13,
+      fourteen: 14,
+      fifteen: 15,
+      sixteen: 16,
+      seventeen: 17,
+      eighteen: 18,
+      nineteen: 19,
+      twenty: 20,
     };
 
     // Try numeric patterns first - improved to handle various number patterns
-    let limitMatch = requestLower.match(/(?:top|first|show(?:\s+me)?|get|find)\s+(\d+)|(\d+)\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?|stock|high\s+stock|low\s+stock)/);
+    const limitMatch = requestLower.match(
+      /(?:top|first|show(?:\s+me)?|get|find)\s+(\d+)|(\d+)\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?|stock|high\s+stock|low\s+stock)/,
+    );
     let limit = limitMatch ? parseInt(limitMatch[1] || limitMatch[2]) : null;
 
     // Try written numbers - improved to handle "show me two" and "two items" patterns
     if (!limit) {
-      const wordPattern = Object.keys(numberWords).join('|');
-      const wordMatch = requestLower.match(new RegExp(`(?:top|first|show(?:\\s+me)?|get|find)\\s+(${wordPattern})|(${wordPattern})\\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?|stock|high\\s+stock|low\\s+stock)`));
+      const wordPattern = Object.keys(numberWords).join("|");
+      const wordMatch = requestLower.match(
+        new RegExp(
+          `(?:top|first|show(?:\\s+me)?|get|find)\\s+(${wordPattern})|(${wordPattern})\\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?|stock|high\\s+stock|low\\s+stock)`,
+        ),
+      );
       if (wordMatch) {
         const wordNumber = wordMatch[1] || wordMatch[2];
         limit = numberWords[wordNumber];
@@ -498,15 +578,15 @@ Respond with JSON only, no explanations:`;
 
   getDefaultSort(entity) {
     const sortDefaults = {
-      orders: 'order_date',
-      customers: 'total_spent',
-      products: 'product_name',
-      inventory: 'quantity_available',
-      suppliers: 'rating',
-      warehouses: 'warehouse_name',
-      transactions: 'created_at',
-      sales: 'order_date',
-      order_items: 'product_name'
+      orders: "order_date",
+      customers: "total_spent",
+      products: "product_name",
+      inventory: "quantity_available",
+      suppliers: "rating",
+      warehouses: "warehouse_name",
+      transactions: "created_at",
+      sales: "order_date",
+      order_items: "product_name",
     };
     return sortDefaults[entity] || null;
   }
@@ -520,31 +600,37 @@ Respond with JSON only, no explanations:`;
     }
 
     try {
-      console.log('[HEALTH-CHECK] Performing LM health check...');
-      const testPrompt = "Reply with JSON: {\"status\":\"healthy\"}";
+      console.log("[HEALTH-CHECK] Performing LM health check...");
+      const testPrompt = 'Reply with JSON: {"status":"healthy"}';
 
-      const response = await ollamaClient.generateResponse(testPrompt, 'phi3:mini', {
-        temperature: 0.1,
-        max_tokens: 50
-      });
+      const response = await ollamaClient.generateResponse(
+        testPrompt,
+        "phi3:mini",
+        {
+          temperature: 0.1,
+          max_tokens: 50,
+        },
+      );
 
       // Simple test - if we get any response, consider LM healthy
       if (response && (response.response || response)) {
         this.lmHealthy = true;
         this.consecutiveFailures = 0;
-        console.log('[HEALTH-CHECK] LM is healthy');
+        console.log("[HEALTH-CHECK] LM is healthy");
       } else {
-        throw new Error('No response from LM');
+        throw new Error("No response from LM");
       }
-
     } catch (error) {
       this.consecutiveFailures++;
-      console.log(`[HEALTH-CHECK] LM health check failed (${this.consecutiveFailures} consecutive failures):`, error.message);
+      console.log(
+        `[HEALTH-CHECK] LM health check failed (${this.consecutiveFailures} consecutive failures):`,
+        error.message,
+      );
 
       // Mark as unhealthy after 3 consecutive failures
       if (this.consecutiveFailures >= 3) {
         this.lmHealthy = false;
-        console.log('[HEALTH-CHECK] LM marked as unhealthy');
+        console.log("[HEALTH-CHECK] LM marked as unhealthy");
       }
     }
 
@@ -558,11 +644,15 @@ Respond with JSON only, no explanations:`;
     }
 
     // Don't use LM if failure rate is too high (>50% in recent requests)
-    const totalRecentRequests = this.healthMetrics.lmSuccessCount + this.healthMetrics.lmFailureCount;
+    const totalRecentRequests =
+      this.healthMetrics.lmSuccessCount + this.healthMetrics.lmFailureCount;
     if (totalRecentRequests >= 10) {
-      const failureRate = this.healthMetrics.lmFailureCount / totalRecentRequests;
+      const failureRate =
+        this.healthMetrics.lmFailureCount / totalRecentRequests;
       if (failureRate > 0.5) {
-        console.log(`[LM-HEALTH] High failure rate (${(failureRate * 100).toFixed(1)}%), using fallback`);
+        console.log(
+          `[LM-HEALTH] High failure rate (${(failureRate * 100).toFixed(1)}%), using fallback`,
+        );
         return false;
       }
     }
@@ -583,23 +673,30 @@ Respond with JSON only, no explanations:`;
     }
 
     // Reset counters periodically to prevent overflow
-    const totalRequests = this.healthMetrics.lmSuccessCount + this.healthMetrics.lmFailureCount;
+    const totalRequests =
+      this.healthMetrics.lmSuccessCount + this.healthMetrics.lmFailureCount;
     if (totalRequests > 1000) {
-      console.log('[HEALTH-METRICS] Resetting metrics counters');
-      this.healthMetrics.lmSuccessCount = Math.floor(this.healthMetrics.lmSuccessCount / 2);
-      this.healthMetrics.lmFailureCount = Math.floor(this.healthMetrics.lmFailureCount / 2);
-      this.healthMetrics.fallbackCount = Math.floor(this.healthMetrics.fallbackCount / 2);
+      console.log("[HEALTH-METRICS] Resetting metrics counters");
+      this.healthMetrics.lmSuccessCount = Math.floor(
+        this.healthMetrics.lmSuccessCount / 2,
+      );
+      this.healthMetrics.lmFailureCount = Math.floor(
+        this.healthMetrics.lmFailureCount / 2,
+      );
+      this.healthMetrics.fallbackCount = Math.floor(
+        this.healthMetrics.fallbackCount / 2,
+      );
     }
   }
 
   generateCacheKey(userRequest) {
-    return userRequest.toLowerCase().trim().replace(/\s+/g, ' ');
+    return userRequest.toLowerCase().trim().replace(/\s+/g, " ");
   }
 
   clearCache() {
     this.cache.clear();
     this.smartCache.clear();
-    console.log('[CACHE] All caches cleared');
+    console.log("[CACHE] All caches cleared");
   }
 
   getCacheStats() {
@@ -608,7 +705,7 @@ Respond with JSON only, no explanations:`;
       smart_cache: this.smartCache.getStats(),
       health_metrics: this.healthMetrics,
       lm_healthy: this.lmHealthy,
-      last_health_check: new Date(this.lastHealthCheck).toISOString()
+      last_health_check: new Date(this.lastHealthCheck).toISOString(),
     };
   }
 }

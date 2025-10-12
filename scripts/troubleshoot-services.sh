@@ -28,9 +28,9 @@ TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 LOG_FILE="$PROJECT_DIR/logs/troubleshoot_$TIMESTAMP.log"
 
 # Service configuration (compatible with bash 3.2+)
-SERVICES="ollama:11434 chromadb:8000 postgres:5432 redis:6379 orchestration:8001 embedding-service:8002 traefik:80 prometheus:9090 grafana:3000 elasticsearch:9200 kibana:5601"
+SERVICES="ollama:11434 chromadb:8000 redis:6379 orchestration:8001 embedding-service:8002 traefik:80 prometheus:9090 grafana:3000 elasticsearch:9200 kibana:5601"
 
-DOCKER_CONTAINERS="ollama:slm-ollama chromadb:slm-chromadb postgres:slm-postgres redis:slm-redis orchestration:slm-orchestration embedding-service:slm-embedding traefik:slm-traefik nginx:slm-nginx prometheus:slm-prometheus grafana:slm-grafana elasticsearch:slm-elasticsearch logstash:slm-logstash kibana:slm-kibana"
+DOCKER_CONTAINERS="ollama:slm-ollama chromadb:slm-chromadb redis:slm-redis orchestration:slm-orchestration embedding-service:slm-embedding traefik:slm-traefik nginx:slm-nginx prometheus:slm-prometheus grafana:slm-grafana elasticsearch:slm-elasticsearch logstash:slm-logstash kibana:slm-kibana"
 
 # Helper functions to get service info
 get_service_port() {
@@ -943,7 +943,7 @@ restart_all_services() {
 
     # Start core services first
     print_status "Starting core services..."
-    local core_services=("postgres" "redis" "chromadb" "ollama")
+    local core_services=("redis" "chromadb" "ollama")
 
     for service in "${core_services[@]}"; do
         print_status "Starting $service..."

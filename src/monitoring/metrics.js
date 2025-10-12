@@ -1,5 +1,5 @@
 // Performance and security metrics collection
-const EventEmitter = require('events');
+const EventEmitter = require("events");
 
 class MetricsCollector extends EventEmitter {
   constructor() {
@@ -13,18 +13,18 @@ class MetricsCollector extends EventEmitter {
     this.config = {
       flushInterval: 60000, // 1 minute
       retentionPeriod: 24 * 60 * 60 * 1000, // 24 hours
-      maxMetrics: 10000
+      maxMetrics: 10000,
     };
 
     this.alerts = {
       thresholds: {
-        'slm_response_time': 5000, // 5 seconds
-        'error_rate': 0.05, // 5%
-        'memory_usage': 0.8, // 80%
-        'cpu_usage': 0.8, // 80%
-        'security_events': 10 // per minute
+        slm_response_time: 5000, // 5 seconds
+        error_rate: 0.05, // 5%
+        memory_usage: 0.8, // 80%
+        cpu_usage: 0.8, // 80%
+        security_events: 10, // per minute
       },
-      callbacks: new Map()
+      callbacks: new Map(),
     };
 
     this.startCollection();
@@ -44,18 +44,22 @@ class MetricsCollector extends EventEmitter {
       this.cleanup();
     }, this.config.retentionPeriod);
 
-    console.log('Metrics collection started');
+    console.log("Metrics collection started");
   }
 
   // Counter methods
   incrementCounter(name, value = 1, tags = {}) {
     const key = this.createMetricKey(name, tags);
-    const current = this.counters.get(key) || { value: 0, tags, lastUpdated: Date.now() };
+    const current = this.counters.get(key) || {
+      value: 0,
+      tags,
+      lastUpdated: Date.now(),
+    };
     current.value += value;
     current.lastUpdated = Date.now();
     this.counters.set(key, current);
 
-    this.emit('counter', { name, value: current.value, tags });
+    this.emit("counter", { name, value: current.value, tags });
     this.checkAlerts(name, current.value);
   }
 
@@ -74,10 +78,10 @@ class MetricsCollector extends EventEmitter {
     this.gauges.set(key, {
       value,
       tags,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
-    this.emit('gauge', { name, value, tags });
+    this.emit("gauge", { name, value, tags });
     this.checkAlerts(name, value);
   }
 
@@ -99,7 +103,7 @@ class MetricsCollector extends EventEmitter {
         min: Infinity,
         max: -Infinity,
         tags,
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       };
     }
 
@@ -116,7 +120,7 @@ class MetricsCollector extends EventEmitter {
     }
 
     this.histograms.set(key, histogram);
-    this.emit('histogram', { name, value, tags });
+    this.emit("histogram", { name, value, tags });
     this.checkAlerts(name, value);
   }
 
@@ -139,7 +143,7 @@ class MetricsCollector extends EventEmitter {
       p50: this.percentile(sortedValues, 0.5),
       p90: this.percentile(sortedValues, 0.9),
       p95: this.percentile(sortedValues, 0.95),
-      p99: this.percentile(sortedValues, 0.99)
+      p99: this.percentile(sortedValues, 0.99),
     };
   }
 
@@ -149,7 +153,7 @@ class MetricsCollector extends EventEmitter {
     this.timers.set(timerId, {
       name,
       tags,
-      startTime: Date.now()
+      startTime: Date.now(),
     });
     return timerId;
   }
@@ -186,25 +190,25 @@ class MetricsCollector extends EventEmitter {
   recordSLMInteraction(model, responseTime, tokenCount, success = true) {
     const tags = { model, success: success.toString() };
 
-    this.incrementCounter('slm_requests_total', 1, tags);
-    this.recordHistogram('slm_response_time', responseTime, tags);
-    this.recordHistogram('slm_token_count', tokenCount, tags);
+    this.incrementCounter("slm_requests_total", 1, tags);
+    this.recordHistogram("slm_response_time", responseTime, tags);
+    this.recordHistogram("slm_token_count", tokenCount, tags);
 
     if (!success) {
-      this.incrementCounter('slm_errors_total', 1, tags);
+      this.incrementCounter("slm_errors_total", 1, tags);
     }
 
-    this.setGauge('slm_last_response_time', responseTime, { model });
+    this.setGauge("slm_last_response_time", responseTime, { model });
   }
 
   recordBusinessAction(actionType, executionTime, success = true) {
     const tags = { actionType, success: success.toString() };
 
-    this.incrementCounter('business_actions_total', 1, tags);
-    this.recordHistogram('business_action_duration', executionTime, tags);
+    this.incrementCounter("business_actions_total", 1, tags);
+    this.recordHistogram("business_action_duration", executionTime, tags);
 
     if (!success) {
-      this.incrementCounter('business_action_errors', 1, tags);
+      this.incrementCounter("business_action_errors", 1, tags);
     }
   }
 
@@ -213,47 +217,53 @@ class MetricsCollector extends EventEmitter {
       service,
       operation,
       status_code: statusCode.toString(),
-      success: (statusCode < 400).toString()
+      success: (statusCode < 400).toString(),
     };
 
-    this.incrementCounter('api_requests_total', 1, tags);
-    this.recordHistogram('api_response_time', responseTime, tags);
+    this.incrementCounter("api_requests_total", 1, tags);
+    this.recordHistogram("api_response_time", responseTime, tags);
 
     if (statusCode >= 400) {
-      this.incrementCounter('api_errors_total', 1, tags);
+      this.incrementCounter("api_errors_total", 1, tags);
     }
   }
 
-  recordDatabaseOperation(operation, table, executionTime, rowCount, success = true) {
+  recordDatabaseOperation(
+    operation,
+    table,
+    executionTime,
+    rowCount,
+    success = true,
+  ) {
     const tags = { operation, table, success: success.toString() };
 
-    this.incrementCounter('db_operations_total', 1, tags);
-    this.recordHistogram('db_execution_time', executionTime, tags);
-    this.recordHistogram('db_rows_affected', rowCount, tags);
+    this.incrementCounter("db_operations_total", 1, tags);
+    this.recordHistogram("db_execution_time", executionTime, tags);
+    this.recordHistogram("db_rows_affected", rowCount, tags);
 
     if (!success) {
-      this.incrementCounter('db_errors_total', 1, tags);
+      this.incrementCounter("db_errors_total", 1, tags);
     }
   }
 
   recordSecurityEvent(eventType, severity) {
     const tags = { eventType, severity };
 
-    this.incrementCounter('security_events_total', 1, tags);
+    this.incrementCounter("security_events_total", 1, tags);
     this.incrementCounter(`security_${severity}_events`, 1, { eventType });
 
     // Security events are always important for alerting
-    this.emit('security_event', { eventType, severity, timestamp: Date.now() });
+    this.emit("security_event", { eventType, severity, timestamp: Date.now() });
   }
 
   recordUserAction(action, userId, success = true) {
     const tags = { action, success: success.toString() };
 
-    this.incrementCounter('user_actions_total', 1, tags);
-    this.setGauge('last_user_activity', Date.now(), { userId });
+    this.incrementCounter("user_actions_total", 1, tags);
+    this.setGauge("last_user_activity", Date.now(), { userId });
 
     if (!success) {
-      this.incrementCounter('user_action_failures', 1, tags);
+      this.incrementCounter("user_action_failures", 1, tags);
     }
   }
 
@@ -264,27 +274,26 @@ class MetricsCollector extends EventEmitter {
       const cpuUsage = process.cpuUsage();
 
       // Memory metrics
-      this.setGauge('memory_rss', memUsage.rss);
-      this.setGauge('memory_heap_used', memUsage.heapUsed);
-      this.setGauge('memory_heap_total', memUsage.heapTotal);
-      this.setGauge('memory_external', memUsage.external);
+      this.setGauge("memory_rss", memUsage.rss);
+      this.setGauge("memory_heap_used", memUsage.heapUsed);
+      this.setGauge("memory_heap_total", memUsage.heapTotal);
+      this.setGauge("memory_external", memUsage.external);
 
       // CPU metrics (approximation)
-      this.setGauge('cpu_user', cpuUsage.user);
-      this.setGauge('cpu_system', cpuUsage.system);
+      this.setGauge("cpu_user", cpuUsage.user);
+      this.setGauge("cpu_system", cpuUsage.system);
 
       // Event loop lag
       const start = process.hrtime();
       setImmediate(() => {
         const lag = process.hrtime(start);
         const lagMs = lag[0] * 1000 + lag[1] * 1e-6;
-        this.setGauge('event_loop_lag', lagMs);
+        this.setGauge("event_loop_lag", lagMs);
       });
 
       // Active handles and requests
-      this.setGauge('active_handles', process._getActiveHandles().length);
-      this.setGauge('active_requests', process._getActiveRequests().length);
-
+      this.setGauge("active_handles", process._getActiveHandles().length);
+      this.setGauge("active_requests", process._getActiveRequests().length);
     }, 5000); // Every 5 seconds
   }
 
@@ -304,27 +313,29 @@ class MetricsCollector extends EventEmitter {
         value,
         threshold,
         timestamp: Date.now(),
-        severity: this.getAlertSeverity(metricName, value, threshold)
+        severity: this.getAlertSeverity(metricName, value, threshold),
       };
 
-      this.emit('alert', alert);
+      this.emit("alert", alert);
 
       if (callback) {
         callback(alert);
       }
 
       // Log alert
-      console.warn(`ALERT: ${metricName} = ${value} exceeds threshold ${threshold}`);
+      console.warn(
+        `ALERT: ${metricName} = ${value} exceeds threshold ${threshold}`,
+      );
     }
   }
 
   getAlertSeverity(metricName, value, threshold) {
     const ratio = value / threshold;
 
-    if (ratio > 2) return 'critical';
-    if (ratio > 1.5) return 'high';
-    if (ratio > 1.2) return 'medium';
-    return 'low';
+    if (ratio > 2) return "critical";
+    if (ratio > 1.5) return "high";
+    if (ratio > 1.2) return "medium";
+    return "low";
   }
 
   // Rate calculations
@@ -355,7 +366,7 @@ class MetricsCollector extends EventEmitter {
       counters: this.summarizeCounters(),
       gauges: this.summarizeGauges(),
       histograms: this.summarizeHistograms(),
-      systemHealth: this.getSystemHealth()
+      systemHealth: this.getSystemHealth(),
     };
 
     return summary;
@@ -367,7 +378,7 @@ class MetricsCollector extends EventEmitter {
       summary[key] = {
         value: counter.value,
         tags: counter.tags,
-        lastUpdated: counter.lastUpdated
+        lastUpdated: counter.lastUpdated,
       };
     }
     return summary;
@@ -379,7 +390,7 @@ class MetricsCollector extends EventEmitter {
       summary[key] = {
         value: gauge.value,
         tags: gauge.tags,
-        timestamp: gauge.timestamp
+        timestamp: gauge.timestamp,
       };
     }
     return summary;
@@ -388,21 +399,18 @@ class MetricsCollector extends EventEmitter {
   summarizeHistograms() {
     const summary = {};
     for (const [key, histogram] of this.histograms) {
-      summary[key] = this.getHistogramStats(
-        key.split('|')[0],
-        histogram.tags
-      );
+      summary[key] = this.getHistogramStats(key.split("|")[0], histogram.tags);
     }
     return summary;
   }
 
   getSystemHealth() {
     return {
-      memoryUsage: this.getGauge('memory_heap_used'),
-      eventLoopLag: this.getGauge('event_loop_lag'),
-      activeHandles: this.getGauge('active_handles'),
+      memoryUsage: this.getGauge("memory_heap_used"),
+      eventLoopLag: this.getGauge("event_loop_lag"),
+      activeHandles: this.getGauge("active_handles"),
       uptime: process.uptime(),
-      nodeVersion: process.version
+      nodeVersion: process.version,
     };
   }
 
@@ -411,7 +419,7 @@ class MetricsCollector extends EventEmitter {
     const tagString = Object.entries(tags)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}=${v}`)
-      .join(',');
+      .join(",");
 
     return tagString ? `${name}|${tagString}` : name;
   }
@@ -437,10 +445,10 @@ class MetricsCollector extends EventEmitter {
 
   flushMetrics() {
     const summary = this.getMetricsSummary();
-    this.emit('flush', summary);
+    this.emit("flush", summary);
 
     // In production, this would send to monitoring systems
-    console.debug('Metrics flushed:', Object.keys(summary));
+    console.debug("Metrics flushed:", Object.keys(summary));
   }
 
   cleanup() {
@@ -485,10 +493,10 @@ class MetricsCollector extends EventEmitter {
   }
 
   // Export methods
-  exportMetrics(format = 'json') {
+  exportMetrics(format = "json") {
     const summary = this.getMetricsSummary();
 
-    if (format === 'prometheus') {
+    if (format === "prometheus") {
       return this.toPrometheusFormat(summary);
     }
 
@@ -496,18 +504,18 @@ class MetricsCollector extends EventEmitter {
   }
 
   toPrometheusFormat(summary) {
-    let output = '';
+    let output = "";
 
     // Export counters
     for (const [key, counter] of Object.entries(summary.counters)) {
-      const [name] = key.split('|');
+      const [name] = key.split("|");
       output += `# TYPE ${name} counter\n`;
       output += `${name}{${this.formatTags(counter.tags)}} ${counter.value}\n`;
     }
 
     // Export gauges
     for (const [key, gauge] of Object.entries(summary.gauges)) {
-      const [name] = key.split('|');
+      const [name] = key.split("|");
       output += `# TYPE ${name} gauge\n`;
       output += `${name}{${this.formatTags(gauge.tags)}} ${gauge.value}\n`;
     }
@@ -518,7 +526,7 @@ class MetricsCollector extends EventEmitter {
   formatTags(tags) {
     return Object.entries(tags)
       .map(([k, v]) => `${k}="${v}"`)
-      .join(',');
+      .join(",");
   }
 
   stop() {
@@ -530,7 +538,7 @@ class MetricsCollector extends EventEmitter {
       clearInterval(this.cleanupInterval);
     }
 
-    console.log('Metrics collection stopped');
+    console.log("Metrics collection stopped");
   }
 }
 

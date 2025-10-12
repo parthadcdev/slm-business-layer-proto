@@ -1,7 +1,7 @@
 # Core dependencies
-fastapi==0.101.0
+fastapi==0.95.0
 uvicorn==0.23.0
-pydantic==2.0.0
+pydantic==1.10.12
 python-multipart==0.0.6
 
 # SLM and AI
@@ -12,7 +12,6 @@ numpy==1.24.3
 
 # Vector database
 chromadb==0.4.0
-qdrant-client==1.4.0
 
 # Data processing
 pandas==2.0.3

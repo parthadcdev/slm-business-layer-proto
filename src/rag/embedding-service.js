@@ -1,42 +1,46 @@
 // Local embedding service using sentence-transformers
-const axios = require('axios');
-const { urlBuilder } = require('../../config/service-urls');
+const axios = require("axios");
+const { urlBuilder } = require("../../config/service-urls");
 
 class EmbeddingService {
   constructor() {
-    this.model = process.env.EMBEDDING_MODEL || 'all-MiniLM-L6-v2';
-    this.serviceUrl = urlBuilder.getBaseUrl('embeddingService');
+    this.model = process.env.EMBEDDING_MODEL || "all-MiniLM-L6-v2";
+    this.serviceUrl = urlBuilder.getBaseUrl("embeddingService");
     this.maxTextLength = 8192;
     this.batchSize = 32;
   }
 
   async generateEmbedding(text) {
     try {
-      if (typeof text !== 'string') {
-        throw new Error('Input must be a string');
+      if (typeof text !== "string") {
+        throw new Error("Input must be a string");
       }
 
       if (text.length > this.maxTextLength) {
         text = text.substring(0, this.maxTextLength);
       }
 
-      const response = await axios.post(urlBuilder.build('embeddingService', 'embed'), {
-        text: text,
-        model: this.model
-      }, {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await axios.post(
+        urlBuilder.build("embeddingService", "embed"),
+        {
+          text: text,
+          model: this.model,
+        },
+        {
+          timeout: 10000,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
 
       return {
         embedding: response.data.embedding,
         model: this.model,
-        text_length: text.length
+        text_length: text.length,
       };
     } catch (error) {
-      console.error('Error generating embedding:', error.message);
+      console.error("Error generating embedding:", error.message);
       throw new Error(`Failed to generate embedding: ${error.message}`);
     }
   }
@@ -44,12 +48,12 @@ class EmbeddingService {
   async generateBatchEmbeddings(texts) {
     try {
       if (!Array.isArray(texts)) {
-        throw new Error('Input must be an array of strings');
+        throw new Error("Input must be an array of strings");
       }
 
-      const processedTexts = texts.map(text => {
-        if (typeof text !== 'string') {
-          throw new Error('All inputs must be strings');
+      const processedTexts = texts.map((text) => {
+        if (typeof text !== "string") {
+          throw new Error("All inputs must be strings");
         }
         return text.length > this.maxTextLength
           ? text.substring(0, this.maxTextLength)
@@ -61,15 +65,19 @@ class EmbeddingService {
       for (let i = 0; i < processedTexts.length; i += this.batchSize) {
         const batch = processedTexts.slice(i, i + this.batchSize);
 
-        const response = await axios.post(urlBuilder.build('embeddingService', 'embed'), {
-          texts: batch,
-          model: this.model
-        }, {
-          timeout: 30000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await axios.post(
+          urlBuilder.build("embeddingService", "embed"),
+          {
+            texts: batch,
+            model: this.model,
+          },
+          {
+            timeout: 30000,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
 
         results.push(...response.data.embeddings);
       }
@@ -77,10 +85,10 @@ class EmbeddingService {
       return {
         embeddings: results,
         model: this.model,
-        count: results.length
+        count: results.length,
       };
     } catch (error) {
-      console.error('Error generating batch embeddings:', error.message);
+      console.error("Error generating batch embeddings:", error.message);
       throw new Error(`Failed to generate batch embeddings: ${error.message}`);
     }
   }
@@ -88,11 +96,11 @@ class EmbeddingService {
   async calculateSimilarity(embedding1, embedding2) {
     try {
       if (!Array.isArray(embedding1) || !Array.isArray(embedding2)) {
-        throw new Error('Embeddings must be arrays');
+        throw new Error("Embeddings must be arrays");
       }
 
       if (embedding1.length !== embedding2.length) {
-        throw new Error('Embeddings must have the same dimensions');
+        throw new Error("Embeddings must have the same dimensions");
       }
 
       // Calculate cosine similarity
@@ -109,8 +117,8 @@ class EmbeddingService {
       const similarity = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
       return Math.max(-1, Math.min(1, similarity)); // Clamp to [-1, 1]
     } catch (error) {
-      console.error('Error calculating similarity:', error.message);
-      throw new Error('Failed to calculate similarity');
+      console.error("Error calculating similarity:", error.message);
+      throw new Error("Failed to calculate similarity");
     }
   }
 
@@ -119,76 +127,85 @@ class EmbeddingService {
       const similarities = await Promise.all(
         candidateEmbeddings.map(async (candidate, index) => ({
           index,
-          similarity: await this.calculateSimilarity(queryEmbedding, candidate.embedding),
-          metadata: candidate.metadata || {}
-        }))
+          similarity: await this.calculateSimilarity(
+            queryEmbedding,
+            candidate.embedding,
+          ),
+          metadata: candidate.metadata || {},
+        })),
       );
 
       return similarities
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, topK);
     } catch (error) {
-      console.error('Error finding most similar:', error.message);
-      throw new Error('Failed to find most similar embeddings');
+      console.error("Error finding most similar:", error.message);
+      throw new Error("Failed to find most similar embeddings");
     }
   }
 
   async checkServiceHealth() {
     try {
-      const response = await axios.get(urlBuilder.build('embeddingService', 'health'), {
-        timeout: 5000
-      });
+      const response = await axios.get(
+        urlBuilder.build("embeddingService", "health"),
+        {
+          timeout: 5000,
+        },
+      );
 
       return {
         healthy: response.status === 200,
         model: this.model,
         service_url: this.serviceUrl,
-        version: response.data.version || 'unknown'
+        version: response.data.version || "unknown",
       };
     } catch (error) {
       return {
         healthy: false,
         error: error.message,
-        service_url: this.serviceUrl
+        service_url: this.serviceUrl,
       };
     }
   }
 
   async getModelInfo() {
     try {
-      const response = await axios.get(urlBuilder.build('embeddingService', 'health'), {
-        timeout: 5000
-      });
+      const response = await axios.get(
+        urlBuilder.build("embeddingService", "health"),
+        {
+          timeout: 5000,
+        },
+      );
 
       return {
         model: this.model,
         dimensions: response.data.dimensions,
         max_sequence_length: response.data.max_sequence_length,
-        tokenizer: response.data.tokenizer || 'unknown'
+        tokenizer: response.data.tokenizer || "unknown",
       };
     } catch (error) {
-      console.error('Error getting model info:', error.message);
+      console.error("Error getting model info:", error.message);
       return {
         model: this.model,
-        error: error.message
+        error: error.message,
       };
     }
   }
 
   preprocessText(text) {
-    if (typeof text !== 'string') {
-      return '';
+    if (typeof text !== "string") {
+      return "";
     }
 
     return text
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/[^\w\s.,!?;:-]/g, '') // Remove special characters
+      .replace(/\s+/g, " ") // Normalize whitespace
+      .replace(/[^\w\s.,!?;:-]/g, "") // Remove special characters
       .trim()
       .substring(0, this.maxTextLength);
   }
 
   chunkText(text, chunkSize = 500, overlap = 50) {
-    if (typeof text !== 'string') {
+    if (typeof text !== "string") {
       return [];
     }
 
@@ -201,11 +218,15 @@ class EmbeddingService {
 
       // Try to break at sentence boundaries
       if (end < text.length) {
-        const lastSentence = chunk.lastIndexOf('.');
-        const lastQuestion = chunk.lastIndexOf('?');
-        const lastExclamation = chunk.lastIndexOf('!');
+        const lastSentence = chunk.lastIndexOf(".");
+        const lastQuestion = chunk.lastIndexOf("?");
+        const lastExclamation = chunk.lastIndexOf("!");
 
-        const lastPunctuation = Math.max(lastSentence, lastQuestion, lastExclamation);
+        const lastPunctuation = Math.max(
+          lastSentence,
+          lastQuestion,
+          lastExclamation,
+        );
 
         if (lastPunctuation > chunk.length * 0.8) {
           chunks.push(chunk.substring(0, lastPunctuation + 1).trim());
@@ -220,7 +241,7 @@ class EmbeddingService {
       }
     }
 
-    return chunks.filter(chunk => chunk.length > 10);
+    return chunks.filter((chunk) => chunk.length > 10);
   }
 }
 

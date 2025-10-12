@@ -17,15 +17,16 @@ class LRUNode {
 }
 
 class LRUCache {
-  constructor(maxSize = 500, ttlMs = 3600000) { // Default 1 hour TTL
+  constructor(maxSize = 500, ttlMs = 3600000) {
+    // Default 1 hour TTL
     this.maxSize = maxSize;
     this.ttlMs = ttlMs;
     this.cache = new Map();
     this.size = 0;
 
     // Doubly linked list for LRU tracking
-    this.head = new LRUNode('head', null);
-    this.tail = new LRUNode('tail', null);
+    this.head = new LRUNode("head", null);
+    this.tail = new LRUNode("tail", null);
     this.head.next = this.tail;
     this.tail.prev = this.head;
 
@@ -36,13 +37,16 @@ class LRUCache {
       evictions: 0,
       sets: 0,
       gets: 0,
-      cleanups: 0
+      cleanups: 0,
     };
 
     // Auto-cleanup timer
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, Math.max(ttlMs / 10, 60000)); // Cleanup every 10% of TTL or minimum 1 minute
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanup();
+      },
+      Math.max(ttlMs / 10, 60000),
+    ); // Cleanup every 10% of TTL or minimum 1 minute
   }
 
   get(key) {
@@ -161,7 +165,10 @@ class LRUCache {
     const nodesToRemove = [];
     let current = this.tail.prev;
 
-    while (current !== this.head && nodesToRemove.length < (this.size - targetSize)) {
+    while (
+      current !== this.head &&
+      nodesToRemove.length < this.size - targetSize
+    ) {
       nodesToRemove.push(current);
       current = current.prev;
     }
@@ -182,7 +189,7 @@ class LRUCache {
 
   // Internal methods
   isExpired(node, now = Date.now()) {
-    return (now - node.lastAccessed) > this.ttlMs;
+    return now - node.lastAccessed > this.ttlMs;
   }
 
   moveToFront(node) {
@@ -214,7 +221,8 @@ class LRUCache {
 
   // Statistics and monitoring
   getStats() {
-    const hitRate = this.stats.gets > 0 ? (this.stats.hits / this.stats.gets) * 100 : 0;
+    const hitRate =
+      this.stats.gets > 0 ? (this.stats.hits / this.stats.gets) * 100 : 0;
     const memoryUsage = this.estimateMemoryUsage();
 
     return {
@@ -227,27 +235,28 @@ class LRUCache {
       sets: this.stats.sets,
       gets: this.stats.gets,
       cleanups: this.stats.cleanups,
-      memoryUsage
+      memoryUsage,
     };
   }
 
   estimateMemoryUsage() {
     let totalSize = 0;
     for (const [key, node] of this.cache) {
-      totalSize += this.estimateObjectSize(key) + this.estimateObjectSize(node.value);
+      totalSize +=
+        this.estimateObjectSize(key) + this.estimateObjectSize(node.value);
     }
     return {
       estimated_bytes: totalSize,
-      estimated_mb: Math.round((totalSize / 1024 / 1024) * 100) / 100
+      estimated_mb: Math.round((totalSize / 1024 / 1024) * 100) / 100,
     };
   }
 
   estimateObjectSize(obj) {
     if (obj === null || obj === undefined) return 0;
-    if (typeof obj === 'string') return obj.length * 2; // Unicode characters
-    if (typeof obj === 'number') return 8;
-    if (typeof obj === 'boolean') return 4;
-    if (typeof obj === 'object') {
+    if (typeof obj === "string") return obj.length * 2; // Unicode characters
+    if (typeof obj === "number") return 8;
+    if (typeof obj === "boolean") return 4;
+    if (typeof obj === "object") {
       return JSON.stringify(obj).length * 2;
     }
     return 0;
@@ -268,7 +277,7 @@ class LRUCache {
         key: current.key,
         accessCount: current.accessCount,
         lastAccessed: new Date(current.lastAccessed).toISOString(),
-        expired: this.isExpired(current)
+        expired: this.isExpired(current),
       });
       current = current.next;
     }

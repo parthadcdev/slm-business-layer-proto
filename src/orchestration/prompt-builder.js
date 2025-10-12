@@ -4,7 +4,7 @@
  * @author Partha Chandramohan
  * @description Dynamic prompt construction for SLM inference with context-aware document retrieval
  */
-const ragService = require('../rag/vector-store');
+const ragService = require("../rag/vector-store");
 
 class PromptBuilder {
   constructor() {
@@ -20,7 +20,10 @@ IMPORTANT GUIDELINES:
   async buildPrompt(userRequest, context) {
     try {
       // Retrieve relevant business requirements from RAG
-      const relevantBRDs = await ragService.retrieveRelevant(userRequest, context);
+      const relevantBRDs = await ragService.retrieveRelevant(
+        userRequest,
+        context,
+      );
 
       // Build context section
       const contextSection = this.buildContextSection(context);
@@ -48,27 +51,27 @@ Please provide a structured response with:
 
       return fullPrompt;
     } catch (error) {
-      console.error('Error building prompt:', error);
-      throw new Error('Failed to construct prompt');
+      console.error("Error building prompt:", error);
+      throw new Error("Failed to construct prompt");
     }
   }
 
   buildContextSection(context) {
     return `CONTEXT:
-- User Role: ${context.userRole || 'Unknown'}
-- Session ID: ${context.sessionId || 'Unknown'}
+- User Role: ${context.userRole || "Unknown"}
+- Session ID: ${context.sessionId || "Unknown"}
 - Timestamp: ${new Date().toISOString()}
-- Request Origin: ${context.origin || 'Unknown'}`;
+- Request Origin: ${context.origin || "Unknown"}`;
   }
 
   buildBRDSection(brds) {
     if (!brds || brds.length === 0) {
-      return 'BUSINESS REQUIREMENTS: No relevant requirements found.';
+      return "BUSINESS REQUIREMENTS: No relevant requirements found.";
     }
 
-    const brdText = brds.map((brd, index) =>
-      `${index + 1}. ${brd.content}`
-    ).join('\n');
+    const brdText = brds
+      .map((brd, index) => `${index + 1}. ${brd.content}`)
+      .join("\n");
 
     return `RELEVANT BUSINESS REQUIREMENTS:
 ${brdText}`;

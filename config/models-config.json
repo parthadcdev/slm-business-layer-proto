@@ -1,0 +1,131 @@
+{
+  "description": "Shared model configuration for SLM Business Service Layer",
+  "author": "Partha Chandramohan",
+  "lastUpdated": "2025-10-11",
+  "providers": {
+    "ollama": {
+      "name": "Ollama (Local)",
+      "endpoint": "http://localhost:11434",
+      "requiresApiKey": false,
+      "models": {
+        "phi3:mini": {
+          "name": "Phi-3 Mini",
+          "description": "Fast inference, code generation, SQL queries (Default)",
+          "size": "2.2 GB",
+          "contextLength": 4096,
+          "temperature": 0.1,
+          "maxTokens": 500,
+          "timeout": 30000,
+          "priority": 2,
+          "strengths": ["Fast inference", "Code generation", "SQL queries"],
+          "useCase": "Default for SQL generation"
+        },
+        "starcoder2:3b": {
+          "name": "StarCoder2 3B",
+          "description": "Advanced SQL generation and code optimization",
+          "size": "1.7 GB",
+          "contextLength": 16384,
+          "temperature": 0.1,
+          "maxTokens": 600,
+          "timeout": 35000,
+          "priority": 3,
+          "strengths": ["Code generation", "SQL optimization", "Programming languages", "Fast inference"],
+          "useCase": "Advanced SQL generation and code optimization"
+        },
+        "codegemma:2b": {
+          "name": "CodeGemma 2B",
+          "description": "Lightweight, fast SQL with minimal resources",
+          "size": "1.6 GB",
+          "contextLength": 8192,
+          "temperature": 0.1,
+          "maxTokens": 500,
+          "timeout": 25000,
+          "priority": 1,
+          "strengths": ["Lightweight", "Fast code generation", "SQL queries", "Efficient inference"],
+          "useCase": "Fast SQL generation with minimal resource usage"
+        },
+        "qwen3:4b": {
+          "name": "Qwen 3 4B",
+          "description": "Large context (32k), mathematical reasoning, business intelligence",
+          "size": "2.5 GB",
+          "contextLength": 32768,
+          "temperature": 0.1,
+          "maxTokens": 800,
+          "timeout": 45000,
+          "priority": 4,
+          "strengths": ["Large context", "Mathematical reasoning", "Structured output", "Business intelligence"],
+          "useCase": "Large context business analysis with mathematical computations"
+        }
+      }
+    },
+    "openai": {
+      "name": "OpenAI",
+      "endpoint": "https://api.openai.com/v1",
+      "requiresApiKey": true,
+      "models": {
+        "gpt-3.5-turbo": {
+          "name": "GPT-3.5 Turbo",
+          "description": "Fast, cost effective production SQL (API key required)",
+          "contextLength": 4096,
+          "temperature": 0.1,
+          "maxTokens": 500,
+          "strengths": ["Fast", "Cost effective", "Good SQL generation"],
+          "useCase": "Production SQL generation"
+        },
+        "gpt-4": {
+          "name": "GPT-4",
+          "description": "Best reasoning, complex analysis, accurate queries (API key required)",
+          "contextLength": 8192,
+          "temperature": 0.1,
+          "maxTokens": 800,
+          "strengths": ["Best reasoning", "Complex analysis", "Accurate queries"],
+          "useCase": "Complex business intelligence queries"
+        },
+        "gpt-4-turbo": {
+          "name": "GPT-4 Turbo",
+          "description": "Large context (128k), complex schemas (API key required)",
+          "contextLength": 128000,
+          "temperature": 0.1,
+          "maxTokens": 1000,
+          "strengths": ["Large context", "Complex schemas", "Multi-step reasoning"],
+          "useCase": "Large context analysis and complex business logic"
+        }
+      }
+    },
+    "anthropic": {
+      "name": "Anthropic",
+      "endpoint": "https://api.anthropic.com/v1",
+      "requiresApiKey": true,
+      "models": {
+        "claude-3-haiku": {
+          "name": "Claude 3 Haiku",
+          "description": "Fast SQL generation (API key required)",
+          "contextLength": 200000,
+          "temperature": 0.1,
+          "maxTokens": 500,
+          "strengths": ["Very fast", "Cost effective", "Accurate SQL"],
+          "useCase": "Production SQL generation with large context"
+        },
+        "claude-3-sonnet": {
+          "name": "Claude 3 Sonnet",
+          "description": "Complex business analysis (API key required)",
+          "contextLength": 200000,
+          "temperature": 0.1,
+          "maxTokens": 800,
+          "strengths": ["Balanced performance", "Complex reasoning", "Business intelligence"],
+          "useCase": "Complex business analysis and multi-table queries"
+        },
+        "claude-3-opus": {
+          "name": "Claude 3 Opus",
+          "description": "Most capable, complex intelligence (API key required)",
+          "contextLength": 200000,
+          "temperature": 0.1,
+          "maxTokens": 1000,
+          "strengths": ["Most capable", "Complex reasoning", "Multi-step analysis"],
+          "useCase": "Most complex business intelligence and data analysis"
+        }
+      }
+    }
+  }
+}
+

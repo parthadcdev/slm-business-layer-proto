@@ -210,13 +210,12 @@ start_podman_services() {
     check_podman
 
     print_status "Starting core Podman services..."
-    podman-compose -f "$COMPOSE_FILE" up -d postgres chromadb redis
+    podman-compose -f "$COMPOSE_FILE" up -d chromadb redis
 
     print_status "Waiting for services to initialize..."
     sleep 10
 
     # Check service health
-    check_service_health "PostgreSQL" "http://localhost:$ORCHESTRATION_PORT/api/service-status/postgres" || true
     check_service_health "ChromaDB" "http://localhost:8000/api/v1/heartbeat" || true
     check_service_health "Ollama" "http://localhost:11434/api/tags" || true
     check_service_health "Redis" "redis://localhost:6379" || true
@@ -310,7 +309,6 @@ show_status() {
             echo -e "${GREEN}Available Endpoints:${NC}"
             echo "  • Health Check: http://localhost:$ORCHESTRATION_PORT/health"
             echo "  • Test Interface: http://localhost:$ORCHESTRATION_PORT/test-interface.html"
-            echo "  • PostgreSQL Status: http://localhost:$ORCHESTRATION_PORT/api/service-status/postgres"
             echo "  • ChromaDB Status: http://localhost:$ORCHESTRATION_PORT/api/service-status/chromadb"
             echo "  • Ollama Status: http://localhost:$ORCHESTRATION_PORT/api/service-status/ollama"
         fi

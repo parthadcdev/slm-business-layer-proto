@@ -5,8 +5,8 @@
 
 **Author:** Partha Chandramohan
 **Description:** Small Language Model powered business service layer replacing traditional custom-coded business logic
-**Status:** ✅ Enhanced Baseline v1.1 with Model Evaluation Framework (September 2025)
-**Last Updated:** September 24, 2025
+**Status:** ✅ Enhanced Baseline v1.2 with Neon DB Cloud Integration (September 2025)
+**Last Updated:** September 27, 2025
 
 ## Project Overview
 This project implements a revolutionary web application architecture that replaces traditional custom-coded business service layers with a Small Language Model (SLM) driven system. The architecture leverages Retrieval-Augmented Generation (RAG) with business requirement documents (BRDs) to eliminate manual coding of business logic.
@@ -16,7 +16,7 @@ This project implements a revolutionary web application architecture that replac
 ### What's Working
 ✅ **Core Orchestration Service** - Express.js app handling business requests
 ✅ **AI-Powered SQL Generation** - Template-based and SLM-enhanced query generation
-✅ **PostgreSQL Database** - Fully functional with sample business data
+✅ **Neon DB Cloud Database** - Cloud PostgreSQL with automatic scaling and backups
 ✅ **Database Adapters** - AI-enhanced and standard PostgreSQL adapters
 ✅ **Authentication & Authorization** - JWT-based security with role-based access
 ✅ **Test Interface** - Browser-based testing interface at test-interface.html
@@ -26,7 +26,7 @@ This project implements a revolutionary web application architecture that replac
 ✅ **Intelligent Fallbacks** - System continues functioning when services are offline
 
 ### Active Services & Components
-- **PostgreSQL Database**: 5 orders, 5 customers, 10 products, 14 inventory items, 3 warehouses, 4 suppliers
+- **Neon DB Cloud Database**: 5 orders, 5 customers, 10 products, 14 inventory items, 3 warehouses, 4 suppliers
 - **Orchestration Service**: Running on port 8001 with full business logic processing
 - **SQL Generator**: Fixed template-based generation with proper clause ordering
 - **Database Health**: All connections stable, schema properly initialized
@@ -43,7 +43,13 @@ This project implements a revolutionary web application architecture that replac
 7. **Multi-Provider Model Support**: Ollama, OpenAI, Anthropic with intelligent model selection
 8. **Performance Analytics**: Latency, accuracy, SQL complexity, and optimization scoring
 
-### Recent Enhancements (v1.1)
+### Recent Enhancements (v1.2)
+✅ **Neon DB Cloud Migration**: Complete migration from local PostgreSQL to cloud-native Neon DB
+✅ **Simplified Architecture**: Removed local database container dependencies
+✅ **Enhanced Reliability**: Cloud database with automatic scaling and backups
+✅ **Production Readiness**: Cloud-first architecture suitable for deployment
+
+### Previous Enhancements (v1.1)
 ✅ **Model Evaluation Framework**: Complete testing and comparison system for multiple LLMs
 ✅ **Parameterized Model Configuration**: Dynamic model selection with provider abstraction
 ✅ **Enhanced Test Interfaces**: Dedicated model comparison UI with detailed metrics
@@ -251,25 +257,25 @@ services:
 
 ## Database Configuration
 
-### PostgreSQL Setup (Docker)
-The project uses PostgreSQL running in Docker with the following configuration:
+### Neon DB Cloud Setup
+The project uses Neon DB, a cloud-native PostgreSQL service with the following benefits:
 
-**Database Credentials:**
+**Database Features:**
 - Database: `business_app`
-- User: `app_user`
-- Password: `app_password`
-- Host: `localhost`
-- Port: `5432`
+- PostgreSQL 17.5 with enterprise features
+- Automatic scaling and connection pooling
+- Built-in backups and point-in-time recovery
+- SSL/TLS encryption for all connections
 
-**Important Notes:**
-- If you have local PostgreSQL (Homebrew) running on port 5432, stop it: `brew services stop postgresql@15`
-- The Docker container automatically creates the database and user
-- Use `./scripts/troubleshoot-services.sh postgres-fix` to resolve user/database issues
-- Use `./scripts/troubleshoot-services.sh postgres-diag` for comprehensive diagnostics
+**Connection Configuration:**
+- The connection string is configured via environment variables
+- Uses `POSTGRES_URL` or `DATABASE_URL` environment variable
+- Supports both connection strings and individual parameters for flexibility
+- SSL required for all connections (secure by default)
 
-**Connection String:**
-```
-postgresql://app_user:app_password@localhost:5432/business_app
+**Connection String Format:**
+```bash
+postgresql://username:password@host:port/database?sslmode=require&channel_binding=require
 ```
 
 ### Database File Organization
@@ -282,9 +288,10 @@ database/
 └── README.md       # Database documentation and guidelines
 ```
 
-**File Loading Order (via docker-entrypoint-initdb.d):**
-1. `01-schema.sql` - Creates tables, indexes, and constraints
-2. `02-sample_data.sql` - Loads realistic sample data with comprehensive business entities
+**Database Initialization:**
+1. `schema.sql` - Creates tables, indexes, and constraints (run via psql)
+2. `sample_data.sql` - Loads realistic sample data (run via psql)
+3. Both files can be executed directly against Neon DB using PostgreSQL client
 
 **Current Database State:**
 - 5 orders (including 1 pending order: ORD-2024-004)
@@ -309,16 +316,20 @@ node --version && npm --version
 
 ### Quick Start (Current Working Setup)
 ```bash
-# 1. Start core services (PostgreSQL, ChromaDB, Ollama, Redis)
+# 1. Set up environment variables
+export POSTGRES_URL='your-neon-db-connection-string'
+export JWT_SECRET='your-super-secret-jwt-key-with-at-least-32-characters-for-security'
+
+# 2. Start supporting services (ChromaDB, Ollama, Redis)
 docker-compose up -d
 
-# 2. Install Node.js dependencies (if not done)
+# 3. Install Node.js dependencies (if not done)
 npm install
 
-# 3. Start the orchestration service
+# 4. Start the orchestration service
 node src/orchestration/app.js
 
-# 4. Access test interface
+# 5. Access test interface
 open test-interface.html
 # or navigate to: http://localhost:8001/test-interface.html
 ```
@@ -327,13 +338,13 @@ open test-interface.html
 - **Orchestration Service**: http://localhost:8001
 - **Test Interface**: http://localhost:8001/test-interface.html
 - **Model Evaluation UI**: http://localhost:8001/model-evaluation.html
-- **PostgreSQL**: localhost:5432 (Docker)
+- **Neon DB**: Cloud-hosted PostgreSQL (via connection string)
 - **Ollama API**: http://localhost:11434
 - **ChromaDB**: http://localhost:8000
 - **Redis**: localhost:6379
 
 ### Service Health Check URLs
-- **PostgreSQL Status**: http://localhost:8001/api/service-status/postgres
+- **Neon DB Status**: http://localhost:8001/api/service-status/postgres
 - **ChromaDB Status**: http://localhost:8001/api/service-status/chromadb
 - **Ollama Status**: http://localhost:8001/api/service-status/ollama
 
@@ -344,24 +355,24 @@ Generate test token: `curl -X POST http://localhost:8001/api/generate-token -H "
 
 ### Common Issues & Solutions
 
-**PostgreSQL Connection Issues:**
+**Neon DB Connection Issues:**
 ```bash
-# Check if local PostgreSQL conflicts with Docker
-brew services list | grep postgres
-# If running, stop it: brew services stop postgresql@15
+# Test connection to Neon DB
+psql 'your-neon-connection-string' -c "SELECT version();"
 
-# Recreate database with fresh data
-docker-compose down postgres
-docker volume rm slm-business-layer-proto_postgres_data
-docker-compose up -d postgres
+# Check environment variable is set
+echo $POSTGRES_URL
+
+# Verify SSL connectivity
+psql 'your-neon-connection-string' -c "SHOW ssl;"
 ```
 
 **Service Health Diagnostics:**
 ```bash
-# Use the comprehensive troubleshooting script
-./scripts/troubleshoot-services.sh postgres-diag  # PostgreSQL diagnostics
-./scripts/troubleshoot-services.sh postgres-fix   # Fix common issues
-./scripts/troubleshoot-services.sh postgres-connection  # Test connection
+# Use the comprehensive troubleshooting script for remaining services
+./scripts/troubleshoot-services.sh status         # Overall service status
+./scripts/troubleshoot-services.sh health         # Health checks
+./scripts/troubleshoot-services.sh restart        # Restart services
 ```
 
 **Orchestration Service Issues:**

@@ -4,7 +4,7 @@
  * @author Partha Chandramohan
  * @description Utilities for parallel processing with timeouts, circuit breakers, and error handling
  */
-const securityConfig = require('../config/security-config');
+const securityConfig = require("../config/security-config");
 
 class ParallelProcessor {
   constructor() {
@@ -21,7 +21,7 @@ class ParallelProcessor {
       failFast = false,
       maxConcurrency = 10,
       retryAttempts = 1,
-      retryDelay = 1000
+      retryDelay = 1000,
     } = options;
 
     if (operations.length === 0) {
@@ -33,7 +33,11 @@ class ParallelProcessor {
     }
 
     const promises = operations.map((operation, index) =>
-      this.executeWithCircuitBreaker(operation, index, { timeout, retryAttempts, retryDelay })
+      this.executeWithCircuitBreaker(operation, index, {
+        timeout,
+        retryAttempts,
+        retryDelay,
+      }),
     );
 
     try {
@@ -44,7 +48,7 @@ class ParallelProcessor {
         return this.processSettledResults(results);
       }
     } catch (error) {
-      console.error('Parallel execution failed:', error.message);
+      console.error("Parallel execution failed:", error.message);
       throw error;
     }
   }
@@ -58,7 +62,10 @@ class ParallelProcessor {
 
     for (let i = 0; i < operations.length; i += maxConcurrency) {
       const batch = operations.slice(i, i + maxConcurrency);
-      const batchResults = await this.executeParallel(batch, { ...options, maxConcurrency: batch.length });
+      const batchResults = await this.executeParallel(batch, {
+        ...options,
+        maxConcurrency: batch.length,
+      });
       results.push(...batchResults);
     }
 
@@ -91,7 +98,7 @@ class ParallelProcessor {
           result,
           operationId,
           attempt,
-          executionTime: Date.now()
+          executionTime: Date.now(),
         };
       } catch (error) {
         lastError = error;
@@ -101,7 +108,9 @@ class ParallelProcessor {
 
         // Retry logic
         if (attempt < retryAttempts) {
-          console.warn(`Operation ${circuitBreakerKey} failed, retrying in ${retryDelay}ms (attempt ${attempt}/${retryAttempts})`);
+          console.warn(
+            `Operation ${circuitBreakerKey} failed, retrying in ${retryDelay}ms (attempt ${attempt}/${retryAttempts})`,
+          );
           await this.sleep(retryDelay * attempt); // Exponential backoff
         }
       }
@@ -112,7 +121,7 @@ class ParallelProcessor {
       error: lastError.message,
       operationId,
       attempt: retryAttempts,
-      executionTime: Date.now()
+      executionTime: Date.now(),
     };
   }
 
@@ -141,14 +150,14 @@ class ParallelProcessor {
    */
   processSettledResults(settledResults) {
     return settledResults.map((result, index) => {
-      if (result.status === 'fulfilled') {
+      if (result.status === "fulfilled") {
         return result.value;
       } else {
         return {
           success: false,
-          error: result.reason?.message || 'Unknown error',
+          error: result.reason?.message || "Unknown error",
           operationId: index,
-          executionTime: Date.now()
+          executionTime: Date.now(),
         };
       }
     });
@@ -164,12 +173,12 @@ class ParallelProcessor {
     const now = Date.now();
 
     // If circuit is closed, it's available
-    if (breaker.state === 'closed') return false;
+    if (breaker.state === "closed") return false;
 
     // If circuit is open, check if cooldown period has passed
-    if (breaker.state === 'open') {
+    if (breaker.state === "open") {
       if (now - breaker.lastFailure > breaker.cooldownPeriod) {
-        breaker.state = 'half-open';
+        breaker.state = "half-open";
         return false;
       }
       return true;
@@ -187,9 +196,9 @@ class ParallelProcessor {
       breaker = {
         failures: 0,
         lastFailure: now,
-        state: 'closed',
+        state: "closed",
         cooldownPeriod: 60000, // 1 minute
-        failureThreshold: 5
+        failureThreshold: 5,
       };
     }
 
@@ -198,8 +207,10 @@ class ParallelProcessor {
 
     // Open circuit if threshold exceeded
     if (breaker.failures >= breaker.failureThreshold) {
-      breaker.state = 'open';
-      console.warn(`Circuit breaker opened for ${key} after ${breaker.failures} failures`);
+      breaker.state = "open";
+      console.warn(
+        `Circuit breaker opened for ${key} after ${breaker.failures} failures`,
+      );
     }
 
     this.circuitBreakers.set(key, breaker);
@@ -209,7 +220,7 @@ class ParallelProcessor {
     const breaker = this.circuitBreakers.get(key);
     if (breaker) {
       breaker.failures = 0;
-      breaker.state = 'closed';
+      breaker.state = "closed";
       this.circuitBreakers.set(key, breaker);
     }
   }
@@ -218,14 +229,14 @@ class ParallelProcessor {
    * Utility for AI service operations
    */
   async executeAIOperations(operations) {
-    const aiConfig = securityConfig.get('ai');
+    const aiConfig = securityConfig.get("ai");
 
     return this.executeParallel(operations, {
       timeout: aiConfig.ollamaTimeout || 30000,
       failFast: false,
       maxConcurrency: 3, // Limit AI operations to prevent overload
       retryAttempts: aiConfig.maxRetries || 2,
-      retryDelay: 2000
+      retryDelay: 2000,
     });
   }
 
@@ -233,14 +244,14 @@ class ParallelProcessor {
    * Specialized method for database operations
    */
   async executeDatabaseOperations(operations) {
-    const dbConfig = securityConfig.get('database');
+    const dbConfig = securityConfig.get("database");
 
     return this.executeParallel(operations, {
       timeout: dbConfig.queryTimeout || 30000,
       failFast: true, // Database operations should fail fast
       maxConcurrency: 5,
       retryAttempts: 1,
-      retryDelay: 1000
+      retryDelay: 1000,
     });
   }
 
@@ -251,18 +262,18 @@ class ParallelProcessor {
     // Execute high priority operations first
     const highPriorityResults = await this.executeParallel(highPriorityOps, {
       ...options,
-      failFast: true
+      failFast: true,
     });
 
     // Then execute low priority operations
     const lowPriorityResults = await this.executeParallel(lowPriorityOps, {
       ...options,
-      failFast: false
+      failFast: false,
     });
 
     return {
       highPriority: highPriorityResults,
-      lowPriority: lowPriorityResults
+      lowPriority: lowPriorityResults,
     };
   }
 
@@ -274,7 +285,10 @@ class ParallelProcessor {
     let operationIndex = 0;
 
     while (operationIndex < operations.length) {
-      const batch = operations.slice(operationIndex, operationIndex + rateLimit);
+      const batch = operations.slice(
+        operationIndex,
+        operationIndex + rateLimit,
+      );
       const batchResults = await this.executeParallel(batch);
       results.push(...batchResults);
 
@@ -292,18 +306,18 @@ class ParallelProcessor {
    * Health check for all services
    */
   async executeHealthChecks(services) {
-    const healthCheckOps = services.map(service => ({
+    const healthCheckOps = services.map((service) => ({
       name: `${service.name}_health_check`,
-      operation: () => service.checkHealth()
+      operation: () => service.checkHealth(),
     }));
 
     return this.executeParallel(
-      healthCheckOps.map(op => op.operation),
+      healthCheckOps.map((op) => op.operation),
       {
         timeout: 5000, // Quick health checks
         failFast: false,
-        retryAttempts: 1
-      }
+        retryAttempts: 1,
+      },
     );
   }
 
@@ -311,24 +325,27 @@ class ParallelProcessor {
    * Graceful shutdown of all operations
    */
   async gracefulShutdown(ongoingOperations = []) {
-    console.log('Initiating graceful shutdown of parallel operations...');
+    console.log("Initiating graceful shutdown of parallel operations...");
 
     // Wait for ongoing operations to complete (with timeout)
     if (ongoingOperations.length > 0) {
       try {
         await Promise.race([
           Promise.allSettled(ongoingOperations),
-          this.sleep(10000) // 10 second timeout
+          this.sleep(10000), // 10 second timeout
         ]);
       } catch (error) {
-        console.warn('Some operations did not complete during shutdown:', error.message);
+        console.warn(
+          "Some operations did not complete during shutdown:",
+          error.message,
+        );
       }
     }
 
     // Clear circuit breakers
     this.circuitBreakers.clear();
 
-    console.log('Parallel processor shutdown complete');
+    console.log("Parallel processor shutdown complete");
   }
 
   /**
@@ -341,13 +358,13 @@ class ParallelProcessor {
       circuitBreakerStats[key] = {
         state: breaker.state,
         failures: breaker.failures,
-        lastFailure: new Date(breaker.lastFailure).toISOString()
+        lastFailure: new Date(breaker.lastFailure).toISOString(),
       };
     }
 
     return {
       circuitBreakers: circuitBreakerStats,
-      totalBreakers: this.circuitBreakers.size
+      totalBreakers: this.circuitBreakers.size,
     };
   }
 
@@ -355,7 +372,7 @@ class ParallelProcessor {
    * Utility sleep function
    */
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

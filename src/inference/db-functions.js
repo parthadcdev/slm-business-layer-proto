@@ -1,63 +1,99 @@
 // Sandboxed database operations
-const { Pool } = require('pg');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require("pg");
+const sqlite3 = require("sqlite3").verbose();
+const path = require("path");
 
 class DatabaseFunctions {
   constructor() {
     this.allowedOperations = [
-      'select',
-      'insert',
-      'update',
-      'delete',
-      'count',
-      'exists',
-      'aggregate'
+      "select",
+      "insert",
+      "update",
+      "delete",
+      "count",
+      "exists",
+      "aggregate",
     ];
 
     this.allowedTables = {
-      'users': {
-        operations: ['select', 'update', 'insert'],
-        columns: ['id', 'name', 'email', 'status', 'created_at', 'updated_at'],
-        readOnly: ['id', 'created_at'],
-        required: ['name', 'email']
+      users: {
+        operations: ["select", "update", "insert"],
+        columns: ["id", "name", "email", "status", "created_at", "updated_at"],
+        readOnly: ["id", "created_at"],
+        required: ["name", "email"],
       },
-      'orders': {
-        operations: ['select', 'insert', 'update'],
-        columns: ['id', 'user_id', 'status', 'total_amount', 'created_at', 'updated_at'],
-        readOnly: ['id', 'created_at'],
-        required: ['user_id', 'total_amount']
+      orders: {
+        operations: ["select", "insert", "update"],
+        columns: [
+          "id",
+          "user_id",
+          "status",
+          "total_amount",
+          "created_at",
+          "updated_at",
+        ],
+        readOnly: ["id", "created_at"],
+        required: ["user_id", "total_amount"],
       },
-      'order_items': {
-        operations: ['select', 'insert', 'update', 'delete'],
-        columns: ['id', 'order_id', 'product_id', 'quantity', 'price', 'created_at'],
-        readOnly: ['id', 'created_at'],
-        required: ['order_id', 'product_id', 'quantity', 'price']
+      order_items: {
+        operations: ["select", "insert", "update", "delete"],
+        columns: [
+          "id",
+          "order_id",
+          "product_id",
+          "quantity",
+          "price",
+          "created_at",
+        ],
+        readOnly: ["id", "created_at"],
+        required: ["order_id", "product_id", "quantity", "price"],
       },
-      'products': {
-        operations: ['select'],
-        columns: ['id', 'name', 'description', 'price', 'stock_quantity', 'status'],
-        readOnly: ['id', 'name', 'description', 'price', 'stock_quantity', 'status']
+      products: {
+        operations: ["select"],
+        columns: [
+          "id",
+          "name",
+          "description",
+          "price",
+          "stock_quantity",
+          "status",
+        ],
+        readOnly: [
+          "id",
+          "name",
+          "description",
+          "price",
+          "stock_quantity",
+          "status",
+        ],
       },
-      'audit_log': {
-        operations: ['select', 'insert'],
-        columns: ['id', 'table_name', 'operation', 'user_id', 'changes', 'timestamp'],
-        readOnly: ['id', 'timestamp'],
-        required: ['table_name', 'operation', 'user_id']
-      }
+      audit_log: {
+        operations: ["select", "insert"],
+        columns: [
+          "id",
+          "table_name",
+          "operation",
+          "user_id",
+          "changes",
+          "timestamp",
+        ],
+        readOnly: ["id", "timestamp"],
+        required: ["table_name", "operation", "user_id"],
+      },
     };
 
     this.maxResults = 1000;
     this.queryTimeout = 10000; // 10 seconds
 
     this.dbConfig = {
-      type: process.env.DB_TYPE || 'sqlite',
-      host: process.env.DB_HOST || 'localhost',
+      type: process.env.DB_TYPE || "sqlite",
+      host: process.env.DB_HOST || "localhost",
       port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'business_app',
-      username: process.env.DB_USER || 'app_user',
-      password: process.env.DB_PASSWORD || '',
-      sqlitePath: process.env.SQLITE_PATH || path.join(__dirname, '../../data/app.db')
+      database: process.env.DB_NAME || "business_app",
+      username: process.env.DB_USER || "app_user",
+      password: process.env.DB_PASSWORD || "",
+      sqlitePath:
+        process.env.SQLITE_PATH || path.join(__dirname, "../../data/app.db"),
     };
 
     this.connection = null;
@@ -65,7 +101,7 @@ class DatabaseFunctions {
 
   async initialize() {
     try {
-      if (this.dbConfig.type === 'postgresql') {
+      if (this.dbConfig.type === "postgresql") {
         this.connection = new Pool({
           host: this.dbConfig.host,
           port: this.dbConfig.port,
@@ -76,14 +112,14 @@ class DatabaseFunctions {
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 10000,
         });
-      } else if (this.dbConfig.type === 'sqlite') {
+      } else if (this.dbConfig.type === "sqlite") {
         this.connection = new sqlite3.Database(this.dbConfig.sqlitePath);
       }
 
       console.log(`Database connection initialized: ${this.dbConfig.type}`);
     } catch (error) {
-      console.error('Failed to initialize database connection:', error);
-      throw new Error('Database initialization failed');
+      console.error("Failed to initialize database connection:", error);
+      throw new Error("Database initialization failed");
     }
   }
 
@@ -93,14 +129,24 @@ class DatabaseFunctions {
       this.validateOperation(operation, table);
 
       // Validate parameters
-      const validatedParams = this.validateParameters(operation, table, parameters);
+      const validatedParams = this.validateParameters(
+        operation,
+        table,
+        parameters,
+      );
 
       // Build and execute query
       const query = this.buildQuery(operation, table, validatedParams, context);
       const result = await this.performQuery(query, context);
 
       // Log the operation
-      await this.logDatabaseOperation(operation, table, validatedParams, result, context);
+      await this.logDatabaseOperation(
+        operation,
+        table,
+        validatedParams,
+        result,
+        context,
+      );
 
       return {
         success: true,
@@ -110,11 +156,14 @@ class DatabaseFunctions {
         rowCount: result.rowCount || result.length,
         metadata: {
           executionTime: result.executionTime,
-          queryId: result.queryId
-        }
+          queryId: result.queryId,
+        },
       };
     } catch (error) {
-      console.error(`Database operation failed: ${operation} on ${table}`, error.message);
+      console.error(
+        `Database operation failed: ${operation} on ${table}`,
+        error.message,
+      );
       throw new Error(`Database operation failed: ${error.message}`);
     }
   }
@@ -129,7 +178,9 @@ class DatabaseFunctions {
     }
 
     if (!this.allowedTables[table].operations.includes(operation)) {
-      throw new Error(`Operation '${operation}' is not allowed on table '${table}'`);
+      throw new Error(
+        `Operation '${operation}' is not allowed on table '${table}'`,
+      );
     }
   }
 
@@ -139,18 +190,22 @@ class DatabaseFunctions {
 
     // Validate columns
     if (parameters.columns) {
-      const invalidColumns = parameters.columns.filter(col =>
-        !tableConfig.columns.includes(col)
+      const invalidColumns = parameters.columns.filter(
+        (col) => !tableConfig.columns.includes(col),
       );
       if (invalidColumns.length > 0) {
-        throw new Error(`Invalid columns: ${invalidColumns.join(', ')}`);
+        throw new Error(`Invalid columns: ${invalidColumns.join(", ")}`);
       }
       validatedParams.columns = parameters.columns;
     }
 
     // Validate data for insert/update operations
-    if (parameters.data && ['insert', 'update'].includes(operation)) {
-      validatedParams.data = this.validateRowData(operation, table, parameters.data);
+    if (parameters.data && ["insert", "update"].includes(operation)) {
+      validatedParams.data = this.validateRowData(
+        operation,
+        table,
+        parameters.data,
+      );
     }
 
     // Validate conditions for select/update/delete operations
@@ -162,7 +217,9 @@ class DatabaseFunctions {
     if (parameters.limit) {
       const limit = parseInt(parameters.limit);
       if (isNaN(limit) || limit <= 0 || limit > this.maxResults) {
-        throw new Error(`Invalid limit. Must be between 1 and ${this.maxResults}`);
+        throw new Error(
+          `Invalid limit. Must be between 1 and ${this.maxResults}`,
+        );
       }
       validatedParams.limit = limit;
     }
@@ -170,7 +227,7 @@ class DatabaseFunctions {
     if (parameters.offset) {
       const offset = parseInt(parameters.offset);
       if (isNaN(offset) || offset < 0) {
-        throw new Error('Invalid offset. Must be non-negative');
+        throw new Error("Invalid offset. Must be non-negative");
       }
       validatedParams.offset = offset;
     }
@@ -189,11 +246,13 @@ class DatabaseFunctions {
     for (const [column, value] of Object.entries(data)) {
       // Check if column is allowed
       if (!tableConfig.columns.includes(column)) {
-        throw new Error(`Column '${column}' is not allowed for table '${table}'`);
+        throw new Error(
+          `Column '${column}' is not allowed for table '${table}'`,
+        );
       }
 
       // Check if column is read-only for updates
-      if (operation === 'update' && tableConfig.readOnly.includes(column)) {
+      if (operation === "update" && tableConfig.readOnly.includes(column)) {
         throw new Error(`Column '${column}' is read-only`);
       }
 
@@ -201,12 +260,14 @@ class DatabaseFunctions {
     }
 
     // Check required fields for insert operations
-    if (operation === 'insert') {
-      const missingRequired = tableConfig.required.filter(col =>
-        !(col in validatedData)
+    if (operation === "insert") {
+      const missingRequired = tableConfig.required.filter(
+        (col) => !(col in validatedData),
       );
       if (missingRequired.length > 0) {
-        throw new Error(`Missing required columns: ${missingRequired.join(', ')}`);
+        throw new Error(
+          `Missing required columns: ${missingRequired.join(", ")}`,
+        );
       }
     }
 
@@ -216,7 +277,7 @@ class DatabaseFunctions {
   validateWhereClause(table, whereClause) {
     const tableConfig = this.allowedTables[table];
 
-    if (typeof whereClause === 'object') {
+    if (typeof whereClause === "object") {
       const validatedWhere = {};
 
       for (const [column, condition] of Object.entries(whereClause)) {
@@ -230,14 +291,14 @@ class DatabaseFunctions {
       return validatedWhere;
     }
 
-    throw new Error('WHERE clause must be an object');
+    throw new Error("WHERE clause must be an object");
   }
 
   validateOrderBy(table, orderBy) {
     const tableConfig = this.allowedTables[table];
 
-    if (typeof orderBy === 'string') {
-      const column = orderBy.replace(/\s+(asc|desc)$/i, '');
+    if (typeof orderBy === "string") {
+      const column = orderBy.replace(/\s+(asc|desc)$/i, "");
       if (!tableConfig.columns.includes(column)) {
         throw new Error(`Column '${column}' is not allowed in ORDER BY`);
       }
@@ -245,16 +306,16 @@ class DatabaseFunctions {
     }
 
     if (Array.isArray(orderBy)) {
-      return orderBy.map(item => this.validateOrderBy(table, item));
+      return orderBy.map((item) => this.validateOrderBy(table, item));
     }
 
-    throw new Error('ORDER BY must be a string or array of strings');
+    throw new Error("ORDER BY must be a string or array of strings");
   }
 
   sanitizeValue(value) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // Basic SQL injection prevention
-      return value.replace(/['";\\]/g, '');
+      return value.replace(/['";\\]/g, "");
     }
     return value;
   }
@@ -263,23 +324,25 @@ class DatabaseFunctions {
     const queryId = this.generateQueryId();
 
     switch (operation) {
-      case 'select':
+      case "select":
         return this.buildSelectQuery(table, parameters, queryId);
-      case 'insert':
+      case "insert":
         return this.buildInsertQuery(table, parameters, queryId);
-      case 'update':
+      case "update":
         return this.buildUpdateQuery(table, parameters, queryId);
-      case 'delete':
+      case "delete":
         return this.buildDeleteQuery(table, parameters, queryId);
-      case 'count':
+      case "count":
         return this.buildCountQuery(table, parameters, queryId);
       default:
-        throw new Error(`Query builder not implemented for operation: ${operation}`);
+        throw new Error(
+          `Query builder not implemented for operation: ${operation}`,
+        );
     }
   }
 
   buildSelectQuery(table, parameters, queryId) {
-    const columns = parameters.columns ? parameters.columns.join(', ') : '*';
+    const columns = parameters.columns ? parameters.columns.join(", ") : "*";
     let query = `SELECT ${columns} FROM ${table}`;
     const values = [];
 
@@ -308,14 +371,16 @@ class DatabaseFunctions {
     const placeholders = columns.map((_, index) => `$${index + 1}`);
     const values = Object.values(parameters.data);
 
-    const query = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
+    const query = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders.join(", ")}) RETURNING *`;
 
     return { text: query, values, queryId };
   }
 
   buildUpdateQuery(table, parameters, queryId) {
     const columns = Object.keys(parameters.data);
-    const setClause = columns.map((col, index) => `${col} = $${index + 1}`).join(', ');
+    const setClause = columns
+      .map((col, index) => `${col} = $${index + 1}`)
+      .join(", ");
     const values = Object.values(parameters.data);
 
     let query = `UPDATE ${table} SET ${setClause}`;
@@ -325,7 +390,7 @@ class DatabaseFunctions {
       query += ` WHERE ${whereClause}`;
     }
 
-    query += ' RETURNING *';
+    query += " RETURNING *";
 
     return { text: query, values, queryId };
   }
@@ -338,7 +403,7 @@ class DatabaseFunctions {
       const whereClause = this.buildWhereClause(parameters.where, values);
       query += ` WHERE ${whereClause}`;
     } else {
-      throw new Error('DELETE operations require a WHERE clause');
+      throw new Error("DELETE operations require a WHERE clause");
     }
 
     return { text: query, values, queryId };
@@ -364,7 +429,7 @@ class DatabaseFunctions {
       conditions.push(`${column} = $${values.length}`);
     }
 
-    return conditions.join(' AND ');
+    return conditions.join(" AND ");
   }
 
   async performQuery(query, context) {
@@ -373,32 +438,35 @@ class DatabaseFunctions {
     try {
       let result;
 
-      if (this.dbConfig.type === 'postgresql') {
+      if (this.dbConfig.type === "postgresql") {
         result = await this.connection.query(query.text, query.values);
-      } else if (this.dbConfig.type === 'sqlite') {
+      } else if (this.dbConfig.type === "sqlite") {
         result = await this.performSQLiteQuery(query);
       }
 
       return {
         ...result,
         executionTime: Date.now() - startTime,
-        queryId: query.queryId
+        queryId: query.queryId,
       };
     } catch (error) {
-      console.error('Query execution failed:', error);
+      console.error("Query execution failed:", error);
       throw new Error(`Query execution failed: ${error.message}`);
     }
   }
 
   async performSQLiteQuery(query) {
     return new Promise((resolve, reject) => {
-      if (query.text.toUpperCase().startsWith('SELECT') || query.text.toUpperCase().startsWith('COUNT')) {
+      if (
+        query.text.toUpperCase().startsWith("SELECT") ||
+        query.text.toUpperCase().startsWith("COUNT")
+      ) {
         this.connection.all(query.text, query.values, (err, rows) => {
           if (err) reject(err);
           else resolve({ rows, rowCount: rows.length });
         });
       } else {
-        this.connection.run(query.text, query.values, function(err) {
+        this.connection.run(query.text, query.values, function (err) {
           if (err) reject(err);
           else resolve({ rowCount: this.changes, lastID: this.lastID });
         });
@@ -409,19 +477,24 @@ class DatabaseFunctions {
   async logDatabaseOperation(operation, table, parameters, result, context) {
     try {
       // Only log to audit_log table if it exists and operation is not on audit_log itself
-      if (table !== 'audit_log' && this.allowedTables['audit_log']) {
+      if (table !== "audit_log" && this.allowedTables["audit_log"]) {
         const auditData = {
           table_name: table,
           operation: operation,
-          user_id: context.userId || 'system',
+          user_id: context.userId || "system",
           changes: JSON.stringify({ parameters, rowCount: result.rowCount }),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
 
-        await this.executeQuery('insert', 'audit_log', { data: auditData }, { ...context, skipAudit: true });
+        await this.executeQuery(
+          "insert",
+          "audit_log",
+          { data: auditData },
+          { ...context, skipAudit: true },
+        );
       }
     } catch (error) {
-      console.error('Failed to log database operation:', error);
+      console.error("Failed to log database operation:", error);
       // Don't throw here as it shouldn't fail the main operation
     }
   }
@@ -432,13 +505,13 @@ class DatabaseFunctions {
 
   async checkConnection() {
     try {
-      if (this.dbConfig.type === 'postgresql') {
-        const result = await this.connection.query('SELECT 1 as test');
-        return { healthy: true, type: 'postgresql' };
-      } else if (this.dbConfig.type === 'sqlite') {
+      if (this.dbConfig.type === "postgresql") {
+        const result = await this.connection.query("SELECT 1 as test");
+        return { healthy: true, type: "postgresql" };
+      } else if (this.dbConfig.type === "sqlite") {
         return new Promise((resolve) => {
-          this.connection.get('SELECT 1 as test', (err, row) => {
-            resolve({ healthy: !err, type: 'sqlite', error: err?.message });
+          this.connection.get("SELECT 1 as test", (err, row) => {
+            resolve({ healthy: !err, type: "sqlite", error: err?.message });
           });
         });
       }
@@ -455,7 +528,7 @@ class DatabaseFunctions {
         operations: config.operations,
         columns: config.columns,
         readOnlyColumns: config.readOnly,
-        requiredColumns: config.required
+        requiredColumns: config.required,
       };
     }
 
@@ -465,15 +538,15 @@ class DatabaseFunctions {
   async close() {
     try {
       if (this.connection) {
-        if (this.dbConfig.type === 'postgresql') {
+        if (this.dbConfig.type === "postgresql") {
           await this.connection.end();
-        } else if (this.dbConfig.type === 'sqlite') {
+        } else if (this.dbConfig.type === "sqlite") {
           this.connection.close();
         }
       }
-      console.log('Database connection closed');
+      console.log("Database connection closed");
     } catch (error) {
-      console.error('Error closing database connection:', error);
+      console.error("Error closing database connection:", error);
     }
   }
 }

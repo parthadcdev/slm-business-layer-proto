@@ -4,9 +4,9 @@
  * @author Partha Chandramohan
  * @description Action execution engine for processing business logic derived from SLM responses
  */
-const apiFunctions = require('./api-functions');
-const dbFunctions = require('./db-functions');
-const permissions = require('./permissions');
+const apiFunctions = require("./api-functions");
+const dbFunctions = require("./db-functions");
+const permissions = require("./permissions");
 
 class ActionExecutor {
   constructor() {
@@ -33,31 +33,36 @@ class ActionExecutor {
         success: true,
         executedActions: results.length,
         results: results,
-        executionTime: results.reduce((sum, r) => sum + (r.executionTime || 0), 0),
+        executionTime: results.reduce(
+          (sum, r) => sum + (r.executionTime || 0),
+          0,
+        ),
         metadata: {
           context: context,
           totalActions: actions.length,
-          successfulActions: results.filter(r => r.success).length,
-          failedActions: results.filter(r => !r.success).length
-        }
+          successfulActions: results.filter((r) => r.success).length,
+          failedActions: results.filter((r) => !r.success).length,
+        },
       };
     } catch (error) {
-      console.error('Action execution failed:', error);
+      console.error("Action execution failed:", error);
       throw new Error(`Execution failed: ${error.message}`);
     }
   }
 
   async validateActions(actions, context) {
     if (!Array.isArray(actions)) {
-      throw new Error('Actions must be provided as an array');
+      throw new Error("Actions must be provided as an array");
     }
 
     if (actions.length === 0) {
-      throw new Error('No actions provided for execution');
+      throw new Error("No actions provided for execution");
     }
 
     if (actions.length > this.maxConcurrentActions) {
-      throw new Error(`Too many actions. Maximum ${this.maxConcurrentActions} allowed`);
+      throw new Error(
+        `Too many actions. Maximum ${this.maxConcurrentActions} allowed`,
+      );
     }
 
     return actions.map((action, index) => {
@@ -66,25 +71,25 @@ class ActionExecutor {
         ...validated,
         executionId: this.generateExecutionId(),
         index: index,
-        validated: true
+        validated: true,
       };
     });
   }
 
   validateSingleAction(action, index) {
-    if (!action || typeof action !== 'object') {
+    if (!action || typeof action !== "object") {
       throw new Error(`Action ${index} must be an object`);
     }
 
-    if (!action.type || typeof action.type !== 'string') {
+    if (!action.type || typeof action.type !== "string") {
       throw new Error(`Action ${index} must have a valid type`);
     }
 
-    if (!action.operation || typeof action.operation !== 'string') {
+    if (!action.operation || typeof action.operation !== "string") {
       throw new Error(`Action ${index} must have a valid operation`);
     }
 
-    const allowedTypes = ['database', 'api', 'business', 'workflow'];
+    const allowedTypes = ["database", "api", "business", "workflow"];
     if (!allowedTypes.includes(action.type)) {
       throw new Error(`Action ${index} type '${action.type}' is not allowed`);
     }
@@ -95,10 +100,10 @@ class ActionExecutor {
       parameters: action.parameters || {},
       metadata: action.metadata || {},
       dependencies: action.dependencies || [],
-      priority: action.priority || 'normal',
+      priority: action.priority || "normal",
       timeout: action.timeout || this.executionTimeout,
       retryable: action.retryable || false,
-      maxRetries: action.maxRetries || 0
+      maxRetries: action.maxRetries || 0,
     };
   }
 
@@ -108,11 +113,13 @@ class ActionExecutor {
         action.type,
         action.operation,
         action.parameters,
-        context
+        context,
       );
 
       if (!hasPermission.allowed) {
-        throw new Error(`Permission denied for ${action.type}.${action.operation}: ${hasPermission.reason}`);
+        throw new Error(
+          `Permission denied for ${action.type}.${action.operation}: ${hasPermission.reason}`,
+        );
       }
     }
   }
@@ -123,19 +130,22 @@ class ActionExecutor {
     const inDegree = new Map();
 
     // Initialize graph
-    actions.forEach(action => {
+    actions.forEach((action) => {
       graph.set(action.executionId, []);
       inDegree.set(action.executionId, 0);
     });
 
     // Build dependency edges
-    actions.forEach(action => {
+    actions.forEach((action) => {
       if (action.dependencies && action.dependencies.length > 0) {
-        action.dependencies.forEach(depIndex => {
+        action.dependencies.forEach((depIndex) => {
           if (depIndex < actions.length) {
             const depAction = actions[depIndex];
             graph.get(depAction.executionId).push(action.executionId);
-            inDegree.set(action.executionId, inDegree.get(action.executionId) + 1);
+            inDegree.set(
+              action.executionId,
+              inDegree.get(action.executionId) + 1,
+            );
           }
         });
       }
@@ -154,7 +164,7 @@ class ActionExecutor {
 
     while (queue.length > 0) {
       const currentId = queue.shift();
-      const currentAction = actions.find(a => a.executionId === currentId);
+      const currentAction = actions.find((a) => a.executionId === currentId);
       ordered.push(currentAction);
 
       // Process dependent actions
@@ -168,12 +178,12 @@ class ActionExecutor {
 
     // Check for circular dependencies
     if (ordered.length !== actions.length) {
-      throw new Error('Circular dependency detected in actions');
+      throw new Error("Circular dependency detected in actions");
     }
 
     // Sort by priority within dependency levels
     return ordered.sort((a, b) => {
-      const priorityOrder = { 'high': 0, 'normal': 1, 'low': 2 };
+      const priorityOrder = { high: 0, normal: 1, low: 2 };
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
   }
@@ -187,8 +197,8 @@ class ActionExecutor {
         results.push(result);
 
         // Stop execution if a high-priority action fails
-        if (!result.success && action.priority === 'high') {
-          console.error('High-priority action failed, stopping execution');
+        if (!result.success && action.priority === "high") {
+          console.error("High-priority action failed, stopping execution");
           break;
         }
       } catch (error) {
@@ -197,12 +207,12 @@ class ActionExecutor {
           action: action,
           error: error.message,
           executionTime: 0,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
         results.push(failureResult);
 
         // Stop on critical failures
-        if (action.priority === 'high') {
+        if (action.priority === "high") {
           break;
         }
       }
@@ -216,29 +226,29 @@ class ActionExecutor {
     const executionContext = {
       ...context,
       executionId: action.executionId,
-      previousResults: previousResults
+      previousResults: previousResults,
     };
 
     this.activeExecutions.set(action.executionId, {
       action,
       startTime,
-      status: 'running'
+      status: "running",
     });
 
     try {
       let result;
 
       switch (action.type) {
-        case 'database':
+        case "database":
           result = await this.executeDatabaseAction(action, executionContext);
           break;
-        case 'api':
+        case "api":
           result = await this.executeAPIAction(action, executionContext);
           break;
-        case 'business':
+        case "business":
           result = await this.executeBusinessAction(action, executionContext);
           break;
-        case 'workflow':
+        case "workflow":
           result = await this.executeWorkflowAction(action, executionContext);
           break;
         default:
@@ -254,7 +264,7 @@ class ActionExecutor {
         action: action,
         result: result,
         executionTime: executionTime,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.activeExecutions.delete(action.executionId);
@@ -273,35 +283,46 @@ class ActionExecutor {
     // Extract table from parameters or operation
     const table = parameters.table || this.extractTableFromOperation(operation);
     if (!table) {
-      throw new Error('Database action must specify a table');
+      throw new Error("Database action must specify a table");
     }
 
-    return await dbFunctions.executeQuery(operation, table, parameters, context);
+    return await dbFunctions.executeQuery(
+      operation,
+      table,
+      parameters,
+      context,
+    );
   }
 
   async executeAPIAction(action, context) {
     const { operation, parameters } = action;
 
     // Extract service from parameters or operation
-    const service = parameters.service || this.extractServiceFromOperation(operation);
+    const service =
+      parameters.service || this.extractServiceFromOperation(operation);
     if (!service) {
-      throw new Error('API action must specify a service');
+      throw new Error("API action must specify a service");
     }
 
-    return await apiFunctions.executeAPICall(service, operation, parameters, context);
+    return await apiFunctions.executeAPICall(
+      service,
+      operation,
+      parameters,
+      context,
+    );
   }
 
   async executeBusinessAction(action, context) {
     const { operation, parameters } = action;
 
     switch (operation) {
-      case 'validate':
+      case "validate":
         return await this.performValidation(parameters, context);
-      case 'calculate':
+      case "calculate":
         return await this.performCalculation(parameters, context);
-      case 'process':
+      case "process":
         return await this.performBusinessProcess(parameters, context);
-      case 'notify':
+      case "notify":
         return await this.performNotification(parameters, context);
       default:
         throw new Error(`Unknown business operation: ${operation}`);
@@ -312,15 +333,15 @@ class ActionExecutor {
     const { operation, parameters } = action;
 
     switch (operation) {
-      case 'start':
+      case "start":
         return await this.startWorkflow(parameters, context);
-      case 'continue':
+      case "continue":
         return await this.continueWorkflow(parameters, context);
-      case 'pause':
+      case "pause":
         return await this.pauseWorkflow(parameters, context);
-      case 'complete':
+      case "complete":
         return await this.completeWorkflow(parameters, context);
-      case 'abort':
+      case "abort":
         return await this.abortWorkflow(parameters, context);
       default:
         throw new Error(`Unknown workflow operation: ${operation}`);
@@ -337,7 +358,9 @@ class ActionExecutor {
         return await this.executeSingleAction(action, context, previousResults);
       } catch (error) {
         if (attempt === maxRetries) {
-          throw new Error(`Action failed after ${maxRetries} retries: ${error.message}`);
+          throw new Error(
+            `Action failed after ${maxRetries} retries: ${error.message}`,
+          );
         }
       }
     }
@@ -349,7 +372,7 @@ class ActionExecutor {
       /from[\s_](\w+)/i,
       /into[\s_](\w+)/i,
       /update[\s_](\w+)/i,
-      /table[\s_](\w+)/i
+      /table[\s_](\w+)/i,
     ];
 
     for (const pattern of tablePatterns) {
@@ -364,16 +387,12 @@ class ActionExecutor {
 
   extractServiceFromOperation(operation) {
     // Try to extract service name from operation string
-    const servicePatterns = [
-      /(\w+)_service/i,
-      /(\w+)_api/i,
-      /call[\s_](\w+)/i
-    ];
+    const servicePatterns = [/(\w+)_service/i, /(\w+)_api/i, /call[\s_](\w+)/i];
 
     for (const pattern of servicePatterns) {
       const match = operation.match(pattern);
       if (match) {
-        return match[1] + '-service';
+        return match[1] + "-service";
       }
     }
 
@@ -383,43 +402,43 @@ class ActionExecutor {
   // Business operation implementations
   async performValidation(parameters, context) {
     // Implement business validation logic
-    return { valid: true, message: 'Validation passed' };
+    return { valid: true, message: "Validation passed" };
   }
 
   async performCalculation(parameters, context) {
     // Implement business calculation logic
-    return { result: 0, formula: 'placeholder' };
+    return { result: 0, formula: "placeholder" };
   }
 
   async performBusinessProcess(parameters, context) {
     // Implement generic business process logic
-    return { processed: true, message: 'Process completed' };
+    return { processed: true, message: "Process completed" };
   }
 
   async performNotification(parameters, context) {
     // Implement notification logic
-    return { sent: true, message: 'Notification sent' };
+    return { sent: true, message: "Notification sent" };
   }
 
   // Workflow operation implementations
   async startWorkflow(parameters, context) {
-    return { workflowId: this.generateWorkflowId(), status: 'started' };
+    return { workflowId: this.generateWorkflowId(), status: "started" };
   }
 
   async continueWorkflow(parameters, context) {
-    return { status: 'continued' };
+    return { status: "continued" };
   }
 
   async pauseWorkflow(parameters, context) {
-    return { status: 'paused' };
+    return { status: "paused" };
   }
 
   async completeWorkflow(parameters, context) {
-    return { status: 'completed' };
+    return { status: "completed" };
   }
 
   async abortWorkflow(parameters, context) {
-    return { status: 'aborted' };
+    return { status: "aborted" };
   }
 
   generateExecutionId() {
@@ -431,16 +450,18 @@ class ActionExecutor {
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   getActiveExecutions() {
-    return Array.from(this.activeExecutions.entries()).map(([id, execution]) => ({
-      id,
-      action: execution.action,
-      duration: Date.now() - execution.startTime,
-      status: execution.status
-    }));
+    return Array.from(this.activeExecutions.entries()).map(
+      ([id, execution]) => ({
+        id,
+        action: execution.action,
+        duration: Date.now() - execution.startTime,
+        status: execution.status,
+      }),
+    );
   }
 
   async cancelExecution(executionId) {
@@ -448,7 +469,7 @@ class ActionExecutor {
       this.activeExecutions.delete(executionId);
       return { cancelled: true, executionId };
     }
-    return { cancelled: false, reason: 'Execution not found' };
+    return { cancelled: false, reason: "Execution not found" };
   }
 }
 

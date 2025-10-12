@@ -4,18 +4,59 @@
  * @author Partha Chandramohan
  * @description Comprehensive SQL validation and sanitization with AST parsing
  */
-const securityConfig = require('../config/security-config');
+const securityConfig = require("../config/security-config");
 
 class SQLValidator {
   constructor() {
-    this.allowedOperations = ['SELECT'];
+    this.allowedOperations = ["SELECT"];
     this.allowedKeywords = [
-      'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER',
-      'ON', 'AS', 'AND', 'OR', 'IN', 'NOT', 'IS', 'NULL', 'LIKE', 'BETWEEN',
-      'ORDER', 'BY', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET', 'COUNT', 'SUM',
-      'AVG', 'MIN', 'MAX', 'DISTINCT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
-      'COALESCE', 'NULLIF', 'EXTRACT', 'CURRENT_DATE', 'CURRENT_TIMESTAMP',
-      'INTERVAL', 'ROUND', 'CONCAT', 'UPPER', 'LOWER', 'ASC', 'DESC'
+      "SELECT",
+      "FROM",
+      "WHERE",
+      "JOIN",
+      "LEFT",
+      "RIGHT",
+      "INNER",
+      "OUTER",
+      "ON",
+      "AS",
+      "AND",
+      "OR",
+      "IN",
+      "NOT",
+      "IS",
+      "NULL",
+      "LIKE",
+      "BETWEEN",
+      "ORDER",
+      "BY",
+      "GROUP",
+      "HAVING",
+      "LIMIT",
+      "OFFSET",
+      "COUNT",
+      "SUM",
+      "AVG",
+      "MIN",
+      "MAX",
+      "DISTINCT",
+      "CASE",
+      "WHEN",
+      "THEN",
+      "ELSE",
+      "END",
+      "COALESCE",
+      "NULLIF",
+      "EXTRACT",
+      "CURRENT_DATE",
+      "CURRENT_TIMESTAMP",
+      "INTERVAL",
+      "ROUND",
+      "CONCAT",
+      "UPPER",
+      "LOWER",
+      "ASC",
+      "DESC",
     ];
 
     this.dangerousPatterns = [
@@ -35,7 +76,7 @@ class SQLValidator {
       // Hex encoding attacks
       /(0x[0-9a-f]+)/gi,
       // SQL operators that shouldn't be in normal queries
-      /(@{2,}|'{3,}|"{3,}|\+{2,})/gi
+      /(@{2,}|'{3,}|"{3,}|\+{2,})/gi,
     ];
 
     this.maxQueryLength = 5000;
@@ -56,11 +97,11 @@ class SQLValidator {
       warnings: [],
       metadata: {
         length: sql.length,
-        complexity: 'unknown',
+        complexity: "unknown",
         tableCount: 0,
         joinCount: 0,
-        subqueryCount: 0
-      }
+        subqueryCount: 0,
+      },
     };
 
     try {
@@ -70,7 +111,9 @@ class SQLValidator {
 
       // Length check
       if (normalizedSQL.length > this.maxQueryLength) {
-        result.errors.push(`SQL query too long: ${normalizedSQL.length} > ${this.maxQueryLength}`);
+        result.errors.push(
+          `SQL query too long: ${normalizedSQL.length} > ${this.maxQueryLength}`,
+        );
         return result;
       }
 
@@ -111,7 +154,6 @@ class SQLValidator {
 
       result.valid = true;
       return result;
-
     } catch (error) {
       result.errors.push(`SQL validation error: ${error.message}`);
       return result;
@@ -120,15 +162,16 @@ class SQLValidator {
 
   normalizeSQL(sql) {
     // Remove extra whitespace and normalize
-    let normalized = sql.trim()
-      .replace(/\s+/g, ' ')
-      .replace(/\(\s+/g, '(')
-      .replace(/\s+\)/g, ')')
-      .replace(/,\s+/g, ', ');
+    let normalized = sql
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/\(\s+/g, "(")
+      .replace(/\s+\)/g, ")")
+      .replace(/,\s+/g, ", ");
 
     // Ensure it ends with semicolon
-    if (!normalized.endsWith(';')) {
-      normalized += ';';
+    if (!normalized.endsWith(";")) {
+      normalized += ";";
     }
 
     return normalized;
@@ -151,18 +194,18 @@ class SQLValidator {
 
     if (quoteCount % 2 !== 0) {
       result.safe = false;
-      result.errors.push('Unmatched single quotes detected');
+      result.errors.push("Unmatched single quotes detected");
     }
 
     if (doubleQuoteCount % 2 !== 0) {
       result.safe = false;
-      result.errors.push('Unmatched double quotes detected');
+      result.errors.push("Unmatched double quotes detected");
     }
 
     // Check for too many special characters (potential encoding attack)
     const specialCharCount = (sql.match(/[%&<>]/g) || []).length;
     if (specialCharCount > 10) {
-      result.errors.push('Excessive special characters detected');
+      result.errors.push("Excessive special characters detected");
       result.safe = false;
     }
 
@@ -173,16 +216,21 @@ class SQLValidator {
     const result = { valid: true, errors: [], metadata: {} };
 
     // Must start with SELECT
-    if (!sql.toUpperCase().trim().startsWith('SELECT')) {
+    if (!sql.toUpperCase().trim().startsWith("SELECT")) {
       result.valid = false;
-      result.errors.push('Only SELECT statements are allowed');
+      result.errors.push("Only SELECT statements are allowed");
       return result;
     }
 
     // Must contain FROM clause (unless it's a simple SELECT with literals)
-    if (!sql.toUpperCase().includes('FROM') && !this.isSimpleLiteralSelect(sql)) {
+    if (
+      !sql.toUpperCase().includes("FROM") &&
+      !this.isSimpleLiteralSelect(sql)
+    ) {
       result.valid = false;
-      result.errors.push('SELECT statements must include FROM clause or be simple literal selects');
+      result.errors.push(
+        "SELECT statements must include FROM clause or be simple literal selects",
+      );
       return result;
     }
 
@@ -192,12 +240,18 @@ class SQLValidator {
 
     if (subqueryCount > this.maxSubqueries) {
       result.valid = false;
-      result.errors.push(`Too many subqueries: ${subqueryCount} > ${this.maxSubqueries}`);
+      result.errors.push(
+        `Too many subqueries: ${subqueryCount} > ${this.maxSubqueries}`,
+      );
       return result;
     }
 
     // Count joins
-    const joinCount = (sql.match(/\b(JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|INNER\s+JOIN|OUTER\s+JOIN)\b/gi) || []).length;
+    const joinCount = (
+      sql.match(
+        /\b(JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|INNER\s+JOIN|OUTER\s+JOIN)\b/gi,
+      ) || []
+    ).length;
     result.metadata.joinCount = joinCount;
 
     if (joinCount > this.maxJoins) {
@@ -210,7 +264,7 @@ class SQLValidator {
     const parenCheck = this.validateParentheses(sql);
     if (!parenCheck.valid) {
       result.valid = false;
-      result.errors.push('Unbalanced parentheses in SQL');
+      result.errors.push("Unbalanced parentheses in SQL");
       return result;
     }
 
@@ -220,17 +274,19 @@ class SQLValidator {
   isSimpleLiteralSelect(sql) {
     // Check if this is a simple SELECT with only literals (no table references)
     const upperSQL = sql.toUpperCase();
-    return upperSQL.match(/^SELECT\s+[^;]*\s*;?$/) &&
-           !upperSQL.includes('FROM') &&
-           !upperSQL.includes('WHERE') &&
-           !upperSQL.includes('JOIN');
+    return (
+      upperSQL.match(/^SELECT\s+[^;]*\s*;?$/) &&
+      !upperSQL.includes("FROM") &&
+      !upperSQL.includes("WHERE") &&
+      !upperSQL.includes("JOIN")
+    );
   }
 
   validateParentheses(sql) {
     let count = 0;
     for (let i = 0; i < sql.length; i++) {
-      if (sql[i] === '(') count++;
-      else if (sql[i] === ')') count--;
+      if (sql[i] === "(") count++;
+      else if (sql[i] === ")") count--;
       if (count < 0) return { valid: false };
     }
     return { valid: count === 0 };
@@ -269,7 +325,7 @@ class SQLValidator {
     const fromMatches = sql.match(/FROM\s+(\w+)/gi);
     if (fromMatches) {
       for (const match of fromMatches) {
-        const tableName = match.replace(/FROM\s+/i, '').trim();
+        const tableName = match.replace(/FROM\s+/i, "").trim();
         tableNames.push(tableName);
       }
     }
@@ -278,7 +334,7 @@ class SQLValidator {
     const joinMatches = sql.match(/JOIN\s+(\w+)/gi);
     if (joinMatches) {
       for (const match of joinMatches) {
-        const tableName = match.replace(/.*JOIN\s+/i, '').trim();
+        const tableName = match.replace(/.*JOIN\s+/i, "").trim();
         tableNames.push(tableName);
       }
     }
@@ -291,14 +347,14 @@ class SQLValidator {
       /^(information_schema|sys|mysql|performance_schema|pg_)/i,
       /^(users|passwords|secrets|keys|admin)/i,
       /[^a-zA-Z0-9_]/,
-      /^[0-9]/
+      /^[0-9]/,
     ];
 
-    return suspiciousPatterns.some(pattern => pattern.test(tableName));
+    return suspiciousPatterns.some((pattern) => pattern.test(tableName));
   }
 
   checkQueryComplexity(sql) {
-    const result = { level: 'simple', warnings: [] };
+    const result = { level: "simple", warnings: [] };
 
     const upperSQL = sql.toUpperCase();
     let complexityScore = 0;
@@ -306,8 +362,11 @@ class SQLValidator {
     // Count various complexity indicators
     const subqueries = (sql.match(/\(\s*SELECT/gi) || []).length;
     const joins = (upperSQL.match(/\bJOIN\b/g) || []).length;
-    const aggregates = (upperSQL.match(/\b(COUNT|SUM|AVG|MIN|MAX|GROUP BY|HAVING)\b/g) || []).length;
-    const conditions = (upperSQL.match(/\b(WHERE|AND|OR|CASE|WHEN)\b/g) || []).length;
+    const aggregates = (
+      upperSQL.match(/\b(COUNT|SUM|AVG|MIN|MAX|GROUP BY|HAVING)\b/g) || []
+    ).length;
+    const conditions = (upperSQL.match(/\b(WHERE|AND|OR|CASE|WHEN)\b/g) || [])
+      .length;
 
     complexityScore += subqueries * 3;
     complexityScore += joins * 2;
@@ -315,10 +374,12 @@ class SQLValidator {
     complexityScore += Math.floor(conditions / 2);
 
     if (complexityScore > 15) {
-      result.level = 'complex';
-      result.warnings.push('High complexity query detected - may impact performance');
+      result.level = "complex";
+      result.warnings.push(
+        "High complexity query detected - may impact performance",
+      );
     } else if (complexityScore > 5) {
-      result.level = 'moderate';
+      result.level = "moderate";
     }
 
     return result;
@@ -330,41 +391,47 @@ class SQLValidator {
     const upperSQL = sql.toUpperCase();
 
     // Check for potentially expensive operations
-    if (upperSQL.includes('SELECT *')) {
-      result.warnings.push('SELECT * may impact performance - consider selecting specific columns');
+    if (upperSQL.includes("SELECT *")) {
+      result.warnings.push(
+        "SELECT * may impact performance - consider selecting specific columns",
+      );
     }
 
     if (upperSQL.match(/LIKE\s+['"][%].*[%]['"]/)) {
-      result.warnings.push('Leading and trailing wildcards in LIKE clauses can prevent index usage');
+      result.warnings.push(
+        "Leading and trailing wildcards in LIKE clauses can prevent index usage",
+      );
     }
 
-    if (upperSQL.includes('ORDER BY') && !upperSQL.includes('LIMIT')) {
-      result.warnings.push('ORDER BY without LIMIT may sort large result sets');
+    if (upperSQL.includes("ORDER BY") && !upperSQL.includes("LIMIT")) {
+      result.warnings.push("ORDER BY without LIMIT may sort large result sets");
     }
 
     if ((upperSQL.match(/\bJOIN\b/g) || []).length > 3) {
-      result.warnings.push('Multiple joins detected - ensure proper indexing');
+      result.warnings.push("Multiple joins detected - ensure proper indexing");
     }
 
-    if (upperSQL.includes('NOT IN') && upperSQL.includes('NULL')) {
-      result.warnings.push('NOT IN with potential NULL values may not behave as expected');
+    if (upperSQL.includes("NOT IN") && upperSQL.includes("NULL")) {
+      result.warnings.push(
+        "NOT IN with potential NULL values may not behave as expected",
+      );
     }
 
     return result;
   }
 
   // Sanitize user input that might be used in dynamic SQL
-  sanitizeInput(input, type = 'string') {
+  sanitizeInput(input, type = "string") {
     if (input === null || input === undefined) {
       return null;
     }
 
     switch (type) {
-      case 'string':
+      case "string":
         return this.sanitizeString(input);
-      case 'number':
+      case "number":
         return this.sanitizeNumber(input);
-      case 'identifier':
+      case "identifier":
         return this.sanitizeIdentifier(input);
       default:
         return this.sanitizeString(input);
@@ -372,33 +439,30 @@ class SQLValidator {
   }
 
   sanitizeString(input) {
-    if (typeof input !== 'string') {
+    if (typeof input !== "string") {
       input = String(input);
     }
 
     // Escape single quotes and backslashes
-    return input
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "''")
-      .replace(/"/g, '""');
+    return input.replace(/\\/g, "\\\\").replace(/'/g, "''").replace(/"/g, '""');
   }
 
   sanitizeNumber(input) {
     const num = parseFloat(input);
     if (isNaN(num) || !isFinite(num)) {
-      throw new Error('Invalid number format');
+      throw new Error("Invalid number format");
     }
     return num;
   }
 
   sanitizeIdentifier(input) {
-    if (typeof input !== 'string') {
-      throw new Error('Identifier must be a string');
+    if (typeof input !== "string") {
+      throw new Error("Identifier must be a string");
     }
 
     // Only allow alphanumeric characters and underscores
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(input)) {
-      throw new Error('Invalid identifier format');
+      throw new Error("Invalid identifier format");
     }
 
     return input;
@@ -407,12 +471,15 @@ class SQLValidator {
   // Create parameterized query placeholders
   createParameterizedQuery(template, params) {
     let paramIndex = 1;
-    const replacedSQL = template.replace(/\$PARAM\$/g, () => `$${paramIndex++}`);
+    const replacedSQL = template.replace(
+      /\$PARAM\$/g,
+      () => `$${paramIndex++}`,
+    );
 
     return {
       sql: replacedSQL,
       params: params,
-      paramCount: paramIndex - 1
+      paramCount: paramIndex - 1,
     };
   }
 
@@ -420,15 +487,22 @@ class SQLValidator {
   validateParameterizedQuery(sql, params) {
     // Ensure no raw string concatenation remains
     if (sql.includes("'") && !sql.match(/\$\d+/)) {
-      throw new Error('Potential SQL injection: raw strings detected in parameterized query');
+      throw new Error(
+        "Potential SQL injection: raw strings detected in parameterized query",
+      );
     }
 
     // Validate parameter count
     const paramMatches = sql.match(/\$\d+/g) || [];
-    const expectedParams = Math.max(...paramMatches.map(p => parseInt(p.substring(1))), 0);
+    const expectedParams = Math.max(
+      ...paramMatches.map((p) => parseInt(p.substring(1))),
+      0,
+    );
 
     if (params.length !== expectedParams) {
-      throw new Error(`Parameter count mismatch: expected ${expectedParams}, got ${params.length}`);
+      throw new Error(
+        `Parameter count mismatch: expected ${expectedParams}, got ${params.length}`,
+      );
     }
 
     return true;

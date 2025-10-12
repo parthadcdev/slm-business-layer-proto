@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "slm-devops": {
+      "command": "node",
+      "args": ["./mcp-server/index.js"],
+      "cwd": "/Users/partha/AxonSphere/slm-business-layer-proto",
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}

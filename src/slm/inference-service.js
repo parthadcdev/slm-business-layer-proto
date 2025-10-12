@@ -1,8 +1,8 @@
 // SLM interaction and response processing
-const ollamaClient = require('./ollama-client');
-const modelManager = require('./model-manager');
-const retrievalService = require('./retrieval-service');
-const guardrails = require('./guardrails');
+const ollamaClient = require("./ollama-client");
+const modelManager = require("./model-manager");
+const retrievalService = require("./retrieval-service");
+const guardrails = require("./guardrails");
 
 class InferenceService {
   constructor() {
@@ -16,14 +16,22 @@ class InferenceService {
       const validatedPrompt = await guardrails.validateInput(prompt);
 
       // Get the best model for this task
-      const model = modelManager.getBestModelForTask(context.taskType || 'general');
+      const model = modelManager.getBestModelForTask(
+        context.taskType || "general",
+      );
       const modelConfig = modelManager.getModelConfig(model);
 
       // Generate response with retry logic
-      const response = await this.generateWithRetry(validatedPrompt, model, modelConfig);
+      const response = await this.generateWithRetry(
+        validatedPrompt,
+        model,
+        modelConfig,
+      );
 
       // Apply output guardrails
-      const validatedResponse = await guardrails.validateOutput(response.response);
+      const validatedResponse = await guardrails.validateOutput(
+        response.response,
+      );
 
       // Parse and structure the response
       const structuredResponse = await this.parseResponse(validatedResponse);
@@ -35,11 +43,11 @@ class InferenceService {
         metadata: {
           created_at: response.created_at,
           context: context,
-          guardrails_passed: true
-        }
+          guardrails_passed: true,
+        },
       };
     } catch (error) {
-      console.error('Error processing business request:', error);
+      console.error("Error processing business request:", error);
       throw new Error(`Inference failed: ${error.message}`);
     }
   }
@@ -53,14 +61,14 @@ class InferenceService {
           temperature: config.temperature,
           top_p: config.top_p || 0.9,
           top_k: config.top_k || 40,
-          repeat_penalty: config.repeat_penalty || 1.1
+          repeat_penalty: config.repeat_penalty || 1.1,
         });
 
         if (response.success) {
           return response;
         }
 
-        throw new Error('Generation failed');
+        throw new Error("Generation failed");
       } catch (error) {
         lastError = error;
         console.error(`Inference attempt ${attempt} failed:`, error.message);
@@ -77,7 +85,10 @@ class InferenceService {
   async parseResponse(responseText) {
     try {
       // Try to parse as JSON first
-      if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+      if (
+        responseText.trim().startsWith("{") ||
+        responseText.trim().startsWith("[")
+      ) {
         try {
           return JSON.parse(responseText);
         } catch (jsonError) {
@@ -88,24 +99,24 @@ class InferenceService {
       // Extract structured information from text response
       return this.extractStructuredInfo(responseText);
     } catch (error) {
-      console.error('Error parsing response:', error);
+      console.error("Error parsing response:", error);
       return {
-        type: 'text',
+        type: "text",
         content: responseText,
-        parsed: false
+        parsed: false,
       };
     }
   }
 
   extractStructuredInfo(text) {
     const structure = {
-      type: 'business_response',
-      analysis: '',
+      type: "business_response",
+      analysis: "",
       actions: [],
       requirements: [],
       risks: [],
       recommendations: [],
-      raw_response: text
+      raw_response: text,
     };
 
     // Extract sections using regex patterns
@@ -113,13 +124,13 @@ class InferenceService {
       analysis: /(?:analysis|understanding):\s*(.*?)(?=\n\n|\n[A-Z]|$)/is,
       actions: /(?:actions|recommendations|steps):\s*(.*?)(?=\n\n|\n[A-Z]|$)/is,
       requirements: /(?:requirements|parameters):\s*(.*?)(?=\n\n|\n[A-Z]|$)/is,
-      risks: /(?:risks|concerns|warnings):\s*(.*?)(?=\n\n|\n[A-Z]|$)/is
+      risks: /(?:risks|concerns|warnings):\s*(.*?)(?=\n\n|\n[A-Z]|$)/is,
     };
 
     for (const [key, pattern] of Object.entries(sections)) {
       const match = text.match(pattern);
       if (match) {
-        if (key === 'actions' || key === 'requirements' || key === 'risks') {
+        if (key === "actions" || key === "requirements" || key === "risks") {
           structure[key] = this.parseListItems(match[1]);
         } else {
           structure[key] = match[1].trim();
@@ -133,10 +144,10 @@ class InferenceService {
   parseListItems(text) {
     return text
       .split(/\n/)
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => line.replace(/^[-*•]\s*/, ''))
-      .filter(line => line.length > 0);
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => line.replace(/^[-*•]\s*/, ""))
+      .filter((line) => line.length > 0);
   }
 
   async validateBusinessLogic(response, context) {
@@ -145,12 +156,15 @@ class InferenceService {
       if (!response.actions || response.actions.length === 0) {
         return {
           valid: false,
-          reason: 'No actionable items identified'
+          reason: "No actionable items identified",
         };
       }
 
       // Validate against available operations
-      const validActions = await this.validateActions(response.actions, context);
+      const validActions = await this.validateActions(
+        response.actions,
+        context,
+      );
 
       // Check for security concerns
       const securityCheck = await guardrails.checkBusinessSecurity(response);
@@ -161,15 +175,15 @@ class InferenceService {
         securityPassed: securityCheck.valid,
         details: {
           actionValidation: validActions,
-          securityValidation: securityCheck
-        }
+          securityValidation: securityCheck,
+        },
       };
     } catch (error) {
-      console.error('Error validating business logic:', error);
+      console.error("Error validating business logic:", error);
       return {
         valid: false,
-        reason: 'Validation error',
-        error: error.message
+        reason: "Validation error",
+        error: error.message,
       };
     }
   }
@@ -180,12 +194,12 @@ class InferenceService {
     return {
       valid: true,
       validatedActions: actions,
-      invalidActions: []
+      invalidActions: [],
     };
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

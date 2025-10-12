@@ -139,6 +139,26 @@
             align-items: center;
             margin: 10px 0;
         }
+
+        /* Training Rating Widget Styles */
+        .rating-btn {
+            background: #f0f0f0;
+            color: #333;
+            border: 2px solid #ddd;
+            padding: 8px 12px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .rating-btn:hover {
+            background: #e0e0e0;
+            border-color: #2196F3;
+        }
+        .rating-btn.selected {
+            background: #2196F3;
+            color: white;
+            border-color: #2196F3;
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body>
@@ -223,7 +243,47 @@
 
             <div id="businessResponse" class="response"></div>
 
-            <!-- New section for SQL Generation Details -->
+            <!-- Training Mode Banner -->
+            <div id="training-mode-banner" style="display:none; background:#4CAF50; color:white; padding:15px; border-radius:8px; margin:20px 0; text-align:center; font-weight:600;">
+                🎓 TRAINING MODE ACTIVE - Please rate query results below
+            </div>
+
+            <!-- Rating Widget -->
+            <div id="rating-widget" style="display:none; background:#fff; padding:20px; border:2px solid #2196F3; border-radius:8px; margin:20px 0;">
+                <h3 style="margin-top:0;">Rate this Query Result (1-10)</h3>
+                <div style="display:flex; gap:8px; margin:15px 0;">
+                    <button onclick="selectRating(1)" class="rating-btn" data-rating="1">1⭐</button>
+                    <button onclick="selectRating(2)" class="rating-btn" data-rating="2">2⭐</button>
+                    <button onclick="selectRating(3)" class="rating-btn" data-rating="3">3⭐</button>
+                    <button onclick="selectRating(4)" class="rating-btn" data-rating="4">4⭐</button>
+                    <button onclick="selectRating(5)" class="rating-btn" data-rating="5">5⭐</button>
+                    <button onclick="selectRating(6)" class="rating-btn" data-rating="6">6⭐</button>
+                    <button onclick="selectRating(7)" class="rating-btn" data-rating="7">7⭐</button>
+                    <button onclick="selectRating(8)" class="rating-btn" data-rating="8">8⭐</button>
+                    <button onclick="selectRating(9)" class="rating-btn" data-rating="9">9⭐</button>
+                    <button onclick="selectRating(10)" class="rating-btn" data-rating="10">10⭐</button>
+                </div>
+                <div style="margin:15px 0;">
+                    <label style="display:block; margin-bottom:5px; font-weight:600;">Feedback (Optional):</label>
+                    <textarea id="feedback-text" placeholder="Explain your rating or describe what was wrong..." style="width:100%; height:80px; padding:10px; border:1px solid #ddd; border-radius:4px;"></textarea>
+                </div>
+                <div style="margin:15px 0;">
+                    <label style="display:block; margin-bottom:5px; font-weight:600;">Corrected SQL (Optional - for ratings ≤5):</label>
+                    <textarea id="corrected-sql" placeholder="Provide the correct SQL if the generated query was wrong..." style="width:100%; height:100px; padding:10px; border:1px solid #ddd; border-radius:4px; font-family:monospace; font-size:12px;"></textarea>
+                </div>
+                <button onclick="submitFeedback()" style="background:#4CAF50; padding:12px 24px; font-size:16px;">Submit Feedback</button>
+                <button onclick="hideRatingWidget()" style="background:#9E9E9E; padding:12px 24px; margin-left:10px;">Skip</button>
+            </div>
+
+            <!-- Enhanced Pipeline Details Section -->
+            <div id="enhancedPipelineDetails" style="margin-top: 20px; display: none;">
+                <h4>🚀 Enhanced Pipeline Details</h4>
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                    <div id="enhancedDetailsContent"></div>
+                </div>
+            </div>
+
+            <!-- Legacy SQL Generation Details Section -->
             <div id="sqlGenerationDetails" style="margin-top: 20px; display: none;">
                 <h4>🔍 SQL Generation Details</h4>
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
@@ -245,6 +305,8 @@
                 <button onclick="testUnauthorized()">Test Without Token</button>
                 <button onclick="testInvalidToken()">Test Invalid Token</button>
                 <button onclick="testValidRequest()">Test Valid Request</button>
+                <button onclick="getCacheMetrics()">Cache Metrics</button>
+                <button onclick="flushCache()" style="background-color: #dc3545; color: white;">Flush Cache</button>
                 <div id="quickTestResponse" class="response"></div>
             </div>
 
@@ -424,7 +486,7 @@ Generated: ${new Date().toLocaleString()}
                 // Get model configuration
                 const modelConfig = getModelConfig();
 
-                const response = await fetch(`${API_BASE}/api/business-request`, {
+                const response = await fetch(`${API_BASE}/api/business-request-v2`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -440,8 +502,14 @@ Generated: ${new Date().toLocaleString()}
                 const data = await response.json();
                 document.getElementById('businessResponse').textContent = JSON.stringify(data, null, 2);
 
-                // Display SQL generation details if available
+                // Display enhanced pipeline details if available
+                displayEnhancedPipelineDetails(data);
+
+                // Display SQL generation details if available (legacy)
                 displaySQLGenerationDetails(data);
+
+                // Handle training mode response
+                handleTrainingResponse(data);
 
                 if (response.ok) {
                     showStatus('Request sent successfully', 'success');
@@ -465,7 +533,7 @@ Generated: ${new Date().toLocaleString()}
         // Test Without Authorization
         async function testUnauthorized() {
             try {
-                const response = await fetch(`${API_BASE}/api/business-request`, {
+                const response = await fetch(`${API_BASE}/api/business-request-v2`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -485,7 +553,7 @@ Generated: ${new Date().toLocaleString()}
         // Test Invalid Token
         async function testInvalidToken() {
             try {
-                const response = await fetch(`${API_BASE}/api/business-request`, {
+                const response = await fetch(`${API_BASE}/api/business-request-v2`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -511,7 +579,7 @@ Generated: ${new Date().toLocaleString()}
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/business-request`, {
+                const response = await fetch(`${API_BASE}/api/business-request-v2`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -543,29 +611,74 @@ Generated: ${new Date().toLocaleString()}
             }, 3000);
         }
 
-        // Model configuration functions
-        const modelData = {
-            ollama: {
-                'phi3:mini': { description: 'Fast inference for SQL generation', temperature: 0.1, max_tokens: 500 },
-                'llama3.2:3b': { description: 'Complex business analysis queries', temperature: 0.2, max_tokens: 800 },
-                'qwen3:4b': { description: 'Large context analysis with math reasoning', temperature: 0.1, max_tokens: 800 },
-                'mistral:7b': { description: 'Structured output and multilingual', temperature: 0.15, max_tokens: 600 },
-                'codellama:7b': { description: 'Complex SQL with joins and subqueries', temperature: 0.05, max_tokens: 1000 }
-            },
-            openai: {
-                'gpt-3.5-turbo': { description: 'Production SQL generation (requires API key)', temperature: 0.1, max_tokens: 500 },
-                'gpt-4': { description: 'Complex business intelligence (requires API key)', temperature: 0.1, max_tokens: 800 }
-            },
-            anthropic: {
-                'claude-3-haiku': { description: 'Fast and accurate SQL generation (requires API key)', temperature: 0.1, max_tokens: 500 },
-                'claude-3-sonnet': { description: 'Complex business analysis (requires API key)', temperature: 0.1, max_tokens: 800 }
+        // Model configuration - Loaded from shared config
+        // Synchronized with backend config/models-config.json
+        let modelData = null;
+        
+        // Load model configuration from shared JSON file
+        async function loadModelConfig() {
+            try {
+                const response = await fetch(`${API_BASE.replace('8001', '8001')}/config/models-config.json`);
+                const config = await response.json();
+                
+                // Transform config into modelData format
+                modelData = {};
+                for (const [providerId, providerInfo] of Object.entries(config.providers)) {
+                    modelData[providerId] = {};
+                    for (const [modelId, modelInfo] of Object.entries(providerInfo.models)) {
+                        modelData[providerId][modelId] = {
+                            description: modelInfo.description,
+                            temperature: modelInfo.temperature,
+                            max_tokens: modelInfo.maxTokens
+                        };
+                    }
+                }
+                
+                console.log('Loaded model configuration:', modelData);
+            } catch (error) {
+                console.warn('Failed to load shared model config, using fallback:', error);
+                // Fallback configuration
+                modelData = {
+                    ollama: {
+                        'phi3:mini': { description: 'Phi-3 Mini - Fast inference, SQL queries (Default)', temperature: 0.1, max_tokens: 500 },
+                        'starcoder2:3b': { description: 'StarCoder2 3B - Advanced SQL optimization', temperature: 0.1, max_tokens: 600 },
+                        'codegemma:2b': { description: 'CodeGemma 2B - Lightweight, fast SQL', temperature: 0.1, max_tokens: 500 },
+                        'qwen3:4b': { description: 'Qwen 3 4B - Large context (32k), business intelligence', temperature: 0.1, max_tokens: 800 }
+                    },
+                    openai: {
+                        'gpt-3.5-turbo': { description: 'GPT-3.5 Turbo - Fast production SQL (API key required)', temperature: 0.1, max_tokens: 500 },
+                        'gpt-4': { description: 'GPT-4 - Complex analysis (API key required)', temperature: 0.1, max_tokens: 800 },
+                        'gpt-4-turbo': { description: 'GPT-4 Turbo - Large context (API key required)', temperature: 0.1, max_tokens: 1000 }
+                    },
+                    anthropic: {
+                        'claude-3-haiku': { description: 'Claude 3 Haiku - Fast SQL (API key required)', temperature: 0.1, max_tokens: 500 },
+                        'claude-3-sonnet': { description: 'Claude 3 Sonnet - Complex analysis (API key required)', temperature: 0.1, max_tokens: 800 },
+                        'claude-3-opus': { description: 'Claude 3 Opus - Most capable (API key required)', temperature: 0.1, max_tokens: 1000 }
+                    }
+                };
             }
-        };
+        }
+        
+        // Load model config on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadModelConfig();
+            updateModelOptions(); // Initialize with default provider
+        });
 
         function updateModelOptions() {
+            if (!modelData) {
+                console.warn('Model data not loaded yet');
+                return;
+            }
+            
             const provider = document.getElementById('modelProvider').value;
             const modelSelect = document.getElementById('modelName');
             const models = modelData[provider];
+
+            if (!models) {
+                console.error('No models found for provider:', provider);
+                return;
+            }
 
             // Clear current options
             modelSelect.innerHTML = '';
@@ -574,7 +687,7 @@ Generated: ${new Date().toLocaleString()}
             for (const [modelId, modelInfo] of Object.entries(models)) {
                 const option = document.createElement('option');
                 option.value = modelId;
-                option.textContent = `${modelId} (${modelInfo.description.split(' ')[0]} ${modelInfo.description.split(' ')[1]})`;
+                option.textContent = `${modelId} - ${modelInfo.description.substring(0, 50)}...`;
                 modelSelect.appendChild(option);
             }
 
@@ -615,6 +728,86 @@ Generated: ${new Date().toLocaleString()}
                     max_tokens: modelData[document.getElementById('modelProvider').value][document.getElementById('modelName').value].max_tokens
                 }
             };
+        }
+
+        // Display Enhanced Pipeline Details (for v2 API)
+        function displayEnhancedPipelineDetails(data) {
+            const detailsDiv = document.getElementById('enhancedPipelineDetails');
+
+            // Check if we have the new enhanced v2 response structure
+            if (data && data.data && !Array.isArray(data.data)) {
+                const responseData = data.data;
+                detailsDiv.style.display = 'block';
+
+                let detailsHTML = '';
+
+                // Cache Information
+                if (responseData.cached !== undefined) {
+                    const cacheStatus = responseData.cached ?
+                        `<span style="color: #28a745; font-weight: bold;">✅ Cache Hit (${responseData.match_type || 'exact'})</span>` :
+                        `<span style="color: #6c757d;">❌ Cache Miss</span>`;
+                    detailsHTML += `<div style="margin-bottom: 10px;"><strong>Cache Status:</strong> ${cacheStatus}</div>`;
+
+                    if (responseData.cached && responseData.confidence) {
+                        detailsHTML += `<div style="margin-bottom: 10px;"><strong>Cache Confidence:</strong> ${(responseData.confidence * 100).toFixed(1)}%</div>`;
+                    }
+                }
+
+                // Intent Classification
+                if (responseData.intent_classification) {
+                    const intent = responseData.intent_classification;
+                    detailsHTML += `<div style="margin-bottom: 10px;">
+                        <strong>Intent:</strong> ${intent.intent} → ${intent.entity}
+                        (confidence: ${(intent.confidence * 100).toFixed(1)}%)
+                    </div>`;
+                }
+
+                // Model Selection
+                if (responseData.model_selection) {
+                    const modelSel = responseData.model_selection;
+                    detailsHTML += `<div style="margin-bottom: 10px;">
+                        <strong>Selected Model:</strong> ${modelSel.primary}
+                        (confidence: ${(modelSel.confidence * 100).toFixed(1)}%)
+                    </div>`;
+                    if (modelSel.reasoning) {
+                        detailsHTML += `<div style="margin-bottom: 10px; font-style: italic; color: #666;">
+                            ${modelSel.reasoning}
+                        </div>`;
+                    }
+                }
+
+                // Validation Result
+                if (responseData.validation_result) {
+                    const validation = responseData.validation_result;
+                    const recColor = validation.recommendation === 'accept' ? '#28a745' :
+                                    validation.recommendation === 'review' ? '#ffc107' : '#dc3545';
+                    detailsHTML += `<div style="margin-bottom: 10px;">
+                        <strong>Validation:</strong>
+                        <span style="color: ${recColor}; font-weight: bold;">${validation.recommendation.toUpperCase()}</span>
+                        (consensus: ${(validation.consensus_score * 100).toFixed(1)}%,
+                         confidence: ${(validation.confidence_score * 100).toFixed(1)}%)
+                    </div>`;
+                }
+
+                // Performance Metrics
+                if (responseData.processing_time) {
+                    detailsHTML += `<div style="margin-bottom: 15px;">
+                        <strong>Processing Time:</strong> ${(responseData.processing_time / 1000).toFixed(2)}s
+                    </div>`;
+                }
+
+                // Performance Recorded
+                if (responseData.performance_recorded) {
+                    detailsHTML += `<div style="margin-bottom: 10px;">
+                        <strong>Performance Recorded:</strong> <span style="color: #28a745;">✅ Yes</span>
+                    </div>`;
+                }
+
+                document.getElementById('enhancedDetailsContent').innerHTML = detailsHTML;
+            } else {
+                // Hide the details section if no enhanced data available
+                detailsDiv.style.display = 'none';
+            }
         }
 
         function displaySQLGenerationDetails(data) {
@@ -678,11 +871,224 @@ Generated: ${new Date().toLocaleString()}
             document.getElementById('modelName').addEventListener('change', updateModelDescription);
         }
 
+        // Get Cache Metrics
+        async function getCacheMetrics() {
+            if (!currentToken) {
+                document.getElementById('quickTestResponse').textContent = 'Please generate a token first';
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/api/cache/metrics`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const metrics = data.data;
+                    const formattedMetrics = `Cache Performance Metrics:
+• Hit Rate: ${(metrics.hit_rate * 100).toFixed(1)}%
+• Cache Hits: ${metrics.hits}
+• Cache Misses: ${metrics.misses}
+• Exact Matches: ${metrics.exact_matches}
+• Semantic Matches: ${metrics.semantic_matches}
+• Cache Saves: ${metrics.cache_saves}
+• Time Saved: ${metrics.query_time_saved}ms
+• Avg Time Saved: ${metrics.avg_time_saved.toFixed(2)}ms
+• Query Patterns Learned: ${metrics.query_patterns_learned}
+• Cache Sizes:
+  - Validated Queries: ${metrics.cache_sizes.validated_queries}
+  - Intent Patterns: ${metrics.cache_sizes.intent_patterns}
+  - Results: ${metrics.cache_sizes.results}`;
+
+                    document.getElementById('quickTestResponse').textContent = formattedMetrics;
+                } else {
+                    document.getElementById('quickTestResponse').textContent = `Cache Metrics Error:\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                document.getElementById('quickTestResponse').textContent = 'Error fetching cache metrics: ' + error.message;
+            }
+        }
+
+        // Flush Cache
+        async function flushCache() {
+            if (!currentToken) {
+                document.getElementById('quickTestResponse').textContent = 'Please generate a token first';
+                return;
+            }
+
+            // Confirm with user before flushing
+            if (!confirm('Are you sure you want to flush all cache data? This will clear all cached queries and patterns.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/cache/flush`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: 'all'  // Flush all cache types
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const cleared = data.data.items_cleared;
+                    const formattedResult = `✅ Cache Flushed Successfully!
+
+Items Cleared:
+• Validated Queries: ${cleared.validated_queries}
+• Intent Patterns: ${cleared.intent_patterns}
+• Results Cache: ${cleared.results}
+• Query Patterns: ${cleared.total_patterns}
+
+Cache Type: ${data.data.cache_type}
+Timestamp: ${data.timestamp}
+
+Before Flush:
+- Validated Queries: ${data.data.before_flush.cache_sizes.validated_queries}
+- Intent Patterns: ${data.data.before_flush.cache_sizes.intent_patterns}
+- Results: ${data.data.before_flush.cache_sizes.results}
+
+After Flush:
+- Validated Queries: ${data.data.after_flush.cache_sizes.validated_queries}
+- Intent Patterns: ${data.data.after_flush.cache_sizes.intent_patterns}
+- Results: ${data.data.after_flush.cache_sizes.results}`;
+
+                    document.getElementById('quickTestResponse').textContent = formattedResult;
+                } else {
+                    document.getElementById('quickTestResponse').textContent = `Cache Flush Error:\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                document.getElementById('quickTestResponse').textContent = 'Error flushing cache: ' + error.message;
+            }
+        }
+
+        // ============================================================================
+        // TRAINING MODE FUNCTIONS
+        // ============================================================================
+        
+        let currentTrainingId = null;
+        let selectedRating = null;
+        let trainingModeActive = false;
+
+        async function checkTrainingMode() {
+            if (!currentToken) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/training/status`, {
+                    headers: { 'Authorization': `Bearer ${currentToken}` }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    trainingModeActive = data.training_mode;
+                    const banner = document.getElementById('training-mode-banner');
+                    banner.style.display = trainingModeActive ? 'block' : 'none';
+                }
+            } catch (error) {
+                console.error('Failed to check training mode:', error);
+            }
+        }
+
+        function selectRating(rating) {
+            selectedRating = rating;
+            
+            // Update button styles
+            document.querySelectorAll('.rating-btn').forEach(btn => {
+                const btnRating = parseInt(btn.getAttribute('data-rating'));
+                if (btnRating === rating) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            });
+            
+            console.log(`Selected rating: ${rating}`);
+        }
+
+        async function submitFeedback() {
+            if (!selectedRating) {
+                alert('Please select a rating first');
+                return;
+            }
+            
+            if (!currentTrainingId) {
+                alert('No training ID available');
+                return;
+            }
+            
+            const feedback = document.getElementById('feedback-text').value;
+            const correctedSQL = document.getElementById('corrected-sql').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/training/feedback`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        training_id: currentTrainingId,
+                        rating: selectedRating,
+                        feedback: feedback || null,
+                        corrected_sql: correctedSQL || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Feedback submitted! Rating: ${selectedRating}/10\n\nYour feedback will improve future queries immediately.`);
+                    hideRatingWidget();
+                } else {
+                    alert('Failed to submit feedback: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to submit feedback:', error);
+                alert('Error submitting feedback: ' + error.message);
+            }
+        }
+
+        function hideRatingWidget() {
+            document.getElementById('rating-widget').style.display = 'none';
+            document.getElementById('feedback-text').value = '';
+            document.getElementById('corrected-sql').value = '';
+            selectedRating = null;
+            currentTrainingId = null;
+            
+            // Clear button selections
+            document.querySelectorAll('.rating-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+        }
+
+        function showRatingWidget(trainingId) {
+            currentTrainingId = trainingId;
+            document.getElementById('rating-widget').style.display = 'block';
+            document.getElementById('rating-widget').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Helper to check if training widget should be shown after response
+        function handleTrainingResponse(response) {
+            if (response && response.training_mode && response.training_id) {
+                showRatingWidget(response.training_id);
+            }
+        }
+
         // Initialize on page load
-        window.onload = function() {
+        window.onload = async function() {
             generateToken();
             checkHealth();
             initializeModelConfig();
+            
+            // Check training mode status every 5 seconds
+            setInterval(checkTrainingMode, 5000);
         };
     </script>
 </body>

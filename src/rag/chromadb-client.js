@@ -4,32 +4,35 @@
  * @author Partha Chandramohan
  * @description ChromaDB client for local vector storage and semantic search operations
  */
-const { ChromaClient } = require('chromadb');
-const { urlBuilder } = require('../../config/service-urls');
+const { ChromaClient } = require("chromadb");
+const { urlBuilder } = require("../../config/service-urls");
 
 class ChromaDBClient {
   constructor() {
     this.client = null;
     this.collection = null;
-    this.collectionName = 'business_requirements';
+    this.collectionName = "business_requirements";
     this.initialized = false;
   }
 
   async initialize() {
     try {
-      // Use ChromaDB client connected to Docker instance
+      // Use ChromaDB client - use CHROMADB_URL from env (container) or localhost (local dev)
+      const chromaHost = process.env.CHROMADB_URL || "http://localhost:8000";
+      console.log(`[ChromaDB] Connecting to ChromaDB at: ${chromaHost}`);
+      
       this.client = new ChromaClient({
-        path: "http://localhost:8000"
+        path: chromaHost,
       });
 
       // Create or get collection
       await this.initializeCollection();
 
       this.initialized = true;
-      console.log('ChromaDB client initialized successfully');
+      console.log("ChromaDB client initialized successfully");
     } catch (error) {
-      console.error('Failed to initialize ChromaDB client:', error);
-      throw new Error('ChromaDB initialization failed');
+      console.error("Failed to initialize ChromaDB client:", error);
+      throw new Error("ChromaDB initialization failed");
     }
   }
 
@@ -37,7 +40,7 @@ class ChromaDBClient {
     try {
       // Try to get existing collection
       this.collection = await this.client.getCollection({
-        name: this.collectionName
+        name: this.collectionName,
       });
       console.log(`Connected to existing collection: ${this.collectionName}`);
     } catch (error) {
@@ -45,9 +48,9 @@ class ChromaDBClient {
       this.collection = await this.client.createCollection({
         name: this.collectionName,
         metadata: {
-          description: 'Business requirements and documentation storage',
-          created_at: new Date().toISOString()
-        }
+          description: "Business requirements and documentation storage",
+          created_at: new Date().toISOString(),
+        },
       });
       console.log(`Created new collection: ${this.collectionName}`);
     }
@@ -60,26 +63,26 @@ class ChromaDBClient {
 
     try {
       const ids = documents.map((_, index) => `doc_${Date.now()}_${index}`);
-      const texts = documents.map(doc => doc.content || doc.text);
-      const metadatas = documents.map(doc => ({
-        source: doc.source || 'unknown',
-        type: doc.type || 'document',
-        title: doc.title || '',
+      const texts = documents.map((doc) => doc.content || doc.text);
+      const metadatas = documents.map((doc) => ({
+        source: doc.source || "unknown",
+        type: doc.type || "document",
+        title: doc.title || "",
         created_at: doc.created_at || new Date().toISOString(),
-        ...doc.metadata
+        ...doc.metadata,
       }));
 
       await this.collection.add({
         ids: ids,
         documents: texts,
-        metadatas: metadatas
+        metadatas: metadatas,
       });
 
       console.log(`Added ${documents.length} documents to collection`);
       return { success: true, added: documents.length, ids };
     } catch (error) {
-      console.error('Error adding documents:', error);
-      throw new Error('Failed to add documents to vector store');
+      console.error("Error adding documents:", error);
+      throw new Error("Failed to add documents to vector store");
     }
   }
 
@@ -96,15 +99,18 @@ class ChromaDBClient {
       const collection = await this.client.getOrCreateCollection({
         name: collectionName,
         metadata: {
-          description: metadata.description || 'ChromaDB collection',
+          description: metadata.description || "ChromaDB collection",
           created_at: new Date().toISOString(),
-          ...metadata
-        }
+          ...metadata,
+        },
       });
       console.log(`Collection ready: ${collectionName}`);
       return collection;
     } catch (error) {
-      console.error(`Failed to get/create collection ${collectionName}:`, error);
+      console.error(
+        `Failed to get/create collection ${collectionName}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -118,7 +124,7 @@ class ChromaDBClient {
     }
 
     return await this.client.getCollection({
-      name: collectionName
+      name: collectionName,
     });
   }
 
@@ -128,35 +134,32 @@ class ChromaDBClient {
     }
 
     try {
-      const {
-        topK = 5,
-        threshold = 0.0,
-        filters = {}
-      } = options;
+      const { topK = 5, threshold = 0.0, filters = {} } = options;
 
       const results = await this.collection.query({
         queryTexts: [query],
         nResults: topK,
-        where: Object.keys(filters).length > 0 ? filters : undefined
+        where: Object.keys(filters).length > 0 ? filters : undefined,
       });
 
       if (!results.documents || !results.documents[0]) {
         return [];
       }
 
-      const formattedResults = results.documents[0].map((doc, index) => ({
-        content: doc,
-        metadata: results.metadatas[0][index],
-        score: results.distances[0][index],
-        id: results.ids[0][index]
-      }))
-      .filter(result => result.score >= threshold)
-      .sort((a, b) => b.score - a.score);
+      const formattedResults = results.documents[0]
+        .map((doc, index) => ({
+          content: doc,
+          metadata: results.metadatas[0][index],
+          score: results.distances[0][index],
+          id: results.ids[0][index],
+        }))
+        .filter((result) => result.score >= threshold)
+        .sort((a, b) => b.score - a.score);
 
       return formattedResults;
     } catch (error) {
-      console.error('Error searching documents:', error);
-      throw new Error('Failed to search vector store');
+      console.error("Error searching documents:", error);
+      throw new Error("Failed to search vector store");
     }
   }
 
@@ -169,17 +172,19 @@ class ChromaDBClient {
       await this.collection.update({
         ids: [id],
         documents: [newContent],
-        metadatas: [{
-          ...metadata,
-          updated_at: new Date().toISOString()
-        }]
+        metadatas: [
+          {
+            ...metadata,
+            updated_at: new Date().toISOString(),
+          },
+        ],
       });
 
       console.log(`Updated document: ${id}`);
       return { success: true, id };
     } catch (error) {
-      console.error('Error updating document:', error);
-      throw new Error('Failed to update document');
+      console.error("Error updating document:", error);
+      throw new Error("Failed to update document");
     }
   }
 
@@ -190,14 +195,14 @@ class ChromaDBClient {
 
     try {
       await this.collection.delete({
-        ids: [id]
+        ids: [id],
       });
 
       console.log(`Deleted document: ${id}`);
       return { success: true, id };
     } catch (error) {
-      console.error('Error deleting document:', error);
-      throw new Error('Failed to delete document');
+      console.error("Error deleting document:", error);
+      throw new Error("Failed to delete document");
     }
   }
 
@@ -212,11 +217,11 @@ class ChromaDBClient {
       return {
         documentCount: count,
         collectionName: this.collectionName,
-        embeddingModel: 'sentence-transformers',
-        lastUpdated: new Date().toISOString()
+        embeddingModel: "sentence-transformers",
+        lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Error getting stats:', error);
+      console.error("Error getting stats:", error);
       return null;
     }
   }
@@ -230,17 +235,17 @@ class ChromaDBClient {
       const results = await this.collection.get({
         limit: limit,
         offset: offset,
-        include: ['documents', 'metadatas']
+        include: ["documents", "metadatas"],
       });
 
       return results.documents.map((doc, index) => ({
         id: results.ids[index],
         content: doc,
-        metadata: results.metadatas[index]
+        metadata: results.metadatas[index],
       }));
     } catch (error) {
-      console.error('Error listing documents:', error);
-      throw new Error('Failed to list documents');
+      console.error("Error listing documents:", error);
+      throw new Error("Failed to list documents");
     }
   }
 
@@ -251,34 +256,34 @@ class ChromaDBClient {
 
     try {
       await this.client.deleteCollection({
-        name: this.collectionName
+        name: this.collectionName,
       });
 
       await this.initializeCollection();
-      console.log('Collection cleared and reinitialized');
+      console.log("Collection cleared and reinitialized");
       return { success: true };
     } catch (error) {
-      console.error('Error clearing collection:', error);
-      throw new Error('Failed to clear collection');
+      console.error("Error clearing collection:", error);
+      throw new Error("Failed to clear collection");
     }
   }
 
   async checkHealth() {
     try {
       if (!this.initialized) {
-        return { healthy: false, error: 'Not initialized' };
+        return { healthy: false, error: "Not initialized" };
       }
 
       const stats = await this.getStats();
       return {
         healthy: true,
         stats: stats,
-        connection: 'active'
+        connection: "active",
       };
     } catch (error) {
       return {
         healthy: false,
-        error: error.message
+        error: error.message,
       };
     }
   }

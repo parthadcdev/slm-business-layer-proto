@@ -56,18 +56,18 @@ class Guardrails {
       /javascript:/i,
       /on\w+\s*=/i,
       /eval\s*\(/i,
-      /function\s*\(/i
+      /function\s*\(/i,
     ];
 
     this.forbiddenActions = [
-      'delete_all',
-      'drop_database',
-      'system_shutdown',
-      'admin_override',
-      'bypass_auth',
-      'escalate_privileges',
-      'execute_code',
-      'file_system_access'
+      "delete_all",
+      "drop_database",
+      "system_shutdown",
+      "admin_override",
+      "bypass_auth",
+      "escalate_privileges",
+      "execute_code",
+      "file_system_access",
     ];
 
     this.maxInputLength = 10000;
@@ -75,25 +75,27 @@ class Guardrails {
   }
 
   async validateInput(input) {
-    if (typeof input !== 'string') {
-      throw new Error('Input must be a string');
+    if (typeof input !== "string") {
+      throw new Error("Input must be a string");
     }
 
     // Length check
     if (input.length > this.maxInputLength) {
-      throw new Error(`Input too long. Maximum ${this.maxInputLength} characters allowed`);
+      throw new Error(
+        `Input too long. Maximum ${this.maxInputLength} characters allowed`,
+      );
     }
 
     // Check for suspicious patterns
     const suspiciousMatches = this.checkSuspiciousPatterns(input);
     if (suspiciousMatches.length > 0) {
-      console.warn('Suspicious patterns detected:', suspiciousMatches);
-      throw new Error('Input contains potentially harmful content');
+      console.warn("Suspicious patterns detected:", suspiciousMatches);
+      throw new Error("Input contains potentially harmful content");
     }
 
     // Check for excessive repetition (potential attack)
     if (this.hasExcessiveRepetition(input)) {
-      throw new Error('Input contains excessive repetition');
+      throw new Error("Input contains excessive repetition");
     }
 
     // Sanitize and return
@@ -101,25 +103,29 @@ class Guardrails {
   }
 
   async validateOutput(output) {
-    if (typeof output !== 'string') {
-      throw new Error('Output must be a string');
+    if (typeof output !== "string") {
+      throw new Error("Output must be a string");
     }
 
     // Length check
     if (output.length > this.maxOutputLength) {
-      console.warn('Output truncated due to length');
-      output = output.substring(0, this.maxOutputLength) + '... [truncated]';
+      console.warn("Output truncated due to length");
+      output = output.substring(0, this.maxOutputLength) + "... [truncated]";
     }
 
     // Check for leaked system information
     if (this.containsSystemInfo(output)) {
-      throw new Error('Output contains potentially sensitive system information');
+      throw new Error(
+        "Output contains potentially sensitive system information",
+      );
     }
 
     // Check for forbidden actions
     const forbiddenFound = this.checkForbiddenActions(output);
     if (forbiddenFound.length > 0) {
-      throw new Error(`Output contains forbidden actions: ${forbiddenFound.join(', ')}`);
+      throw new Error(
+        `Output contains forbidden actions: ${forbiddenFound.join(", ")}`,
+      );
     }
 
     return output;
@@ -140,18 +146,18 @@ class Guardrails {
     if (words.length < 10) return false;
 
     const wordCount = {};
-    words.forEach(word => {
+    words.forEach((word) => {
       wordCount[word] = (wordCount[word] || 0) + 1;
     });
 
     const maxRepetition = Math.max(...Object.values(wordCount));
-    return (maxRepetition / words.length) > threshold;
+    return maxRepetition / words.length > threshold;
   }
 
   sanitizeInput(input) {
     return input
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
-      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove control characters
+      .replace(/\s+/g, " ") // Normalize whitespace
       .trim();
   }
 
@@ -165,10 +171,10 @@ class Guardrails {
       /api\s+keys?/i,
       /secret\s+tokens?/i,
       /password\s*[:=]/i,
-      /private\s+key/i
+      /private\s+key/i,
     ];
 
-    return systemPatterns.some(pattern => pattern.test(text));
+    return systemPatterns.some((pattern) => pattern.test(text));
   }
 
   checkForbiddenActions(text) {
@@ -176,8 +182,10 @@ class Guardrails {
     const lowerText = text.toLowerCase();
 
     for (const action of this.forbiddenActions) {
-      if (lowerText.includes(action.replace('_', ' ')) ||
-          lowerText.includes(action)) {
+      if (
+        lowerText.includes(action.replace("_", " ")) ||
+        lowerText.includes(action)
+      ) {
         found.push(action);
       }
     }
@@ -189,24 +197,24 @@ class Guardrails {
     try {
       // Check if response suggests unsafe business operations
       const unsafeOperations = [
-        'bypass approval',
-        'skip validation',
-        'override security',
-        'disable audit',
-        'emergency access',
-        'admin override'
+        "bypass approval",
+        "skip validation",
+        "override security",
+        "disable audit",
+        "emergency access",
+        "admin override",
       ];
 
       const responseText = JSON.stringify(response).toLowerCase();
-      const foundUnsafe = unsafeOperations.filter(op =>
-        responseText.includes(op)
+      const foundUnsafe = unsafeOperations.filter((op) =>
+        responseText.includes(op),
       );
 
       if (foundUnsafe.length > 0) {
         return {
           valid: false,
-          reason: 'Response suggests unsafe business operations',
-          unsafeOperations: foundUnsafe
+          reason: "Response suggests unsafe business operations",
+          unsafeOperations: foundUnsafe,
         };
       }
 
@@ -214,20 +222,20 @@ class Guardrails {
       if (this.hasDataExposureRisk(responseText)) {
         return {
           valid: false,
-          reason: 'Response may expose sensitive data'
+          reason: "Response may expose sensitive data",
         };
       }
 
       return {
         valid: true,
-        reason: 'Business security checks passed'
+        reason: "Business security checks passed",
       };
     } catch (error) {
-      console.error('Error in business security check:', error);
+      console.error("Error in business security check:", error);
       return {
         valid: false,
-        reason: 'Security validation error',
-        error: error.message
+        reason: "Security validation error",
+        error: error.message,
       };
     }
   }
@@ -239,10 +247,10 @@ class Guardrails {
       /dump\s+database/i,
       /export\s+all\s+data/i,
       /display\s+sensitive/i,
-      /reveal\s+confidential/i
+      /reveal\s+confidential/i,
     ];
 
-    return exposurePatterns.some(pattern => pattern.test(text));
+    return exposurePatterns.some((pattern) => pattern.test(text));
   }
 
   getRiskScore(input) {
@@ -265,7 +273,7 @@ class Guardrails {
       inputLength: input.length,
       suspiciousPatterns: this.checkSuspiciousPatterns(input),
       hasRepetition: this.hasExcessiveRepetition(input),
-      riskLevel: inputRisk > 50 ? 'HIGH' : inputRisk > 20 ? 'MEDIUM' : 'LOW'
+      riskLevel: inputRisk > 50 ? "HIGH" : inputRisk > 20 ? "MEDIUM" : "LOW",
     };
 
     if (output) {

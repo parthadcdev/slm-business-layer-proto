@@ -91,6 +91,94 @@
             color: #2c5aa0;
             font-style: italic;
         }
+        .evaluation-status {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-bar-container {
+            position: relative;
+            width: 300px;
+            height: 25px;
+            background: #e9ecef;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            border-radius: 12px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            font-size: 12px;
+            color: #495057;
+        }
+        .current-model-status {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .model-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .model-badge.evaluating {
+            background: #fff3cd;
+            color: #856404;
+            animation: pulse 1.5s infinite;
+        }
+        .model-badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .model-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .completed-models {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .mini-model-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+        }
+        .mini-model-card.success {
+            border-left: 3px solid #28a745;
+        }
+        .mini-model-card.error {
+            border-left: 3px solid #dc3545;
+        }
         .results-container {
             display: none;
             margin-top: 30px;
@@ -290,6 +378,24 @@
                 <div id="evaluationSpinner" class="spinner"></div>
                 <span id="evaluationLoadingText" class="loading-text">Evaluating all models...</span>
             </div>
+
+            <!-- Real-time Evaluation Status -->
+            <div id="evaluationStatus" class="evaluation-status" style="display: none;">
+                <div class="status-header">
+                    <h4>📊 Evaluation Progress</h4>
+                    <div class="progress-bar-container">
+                        <div id="progressBar" class="progress-bar"></div>
+                        <span id="progressText" class="progress-text">0/0</span>
+                    </div>
+                </div>
+                <div id="currentModelStatus" class="current-model-status">
+                    <strong>Current Model:</strong> <span id="currentModelName">None</span>
+                    <span id="currentModelBadge" class="model-badge">Waiting...</span>
+                </div>
+                <div id="completedModels" class="completed-models">
+                    <!-- Completed model results will appear here -->
+                </div>
+            </div>
         </div>
 
         <!-- Results Display -->
@@ -322,6 +428,8 @@
     <script>
         let currentToken = '';
         const API_BASE = 'http://localhost:8001';
+        let statusPollingInterval = null;
+        let isPolling = false;
 
         // Auto-generate token on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -393,6 +501,8 @@
             }
 
             showLoading();
+            showEvaluationStatus();
+            startStatusPolling();
 
             try {
                 let context = {};
@@ -425,6 +535,8 @@
                 alert('Evaluation failed: ' + error.message);
             } finally {
                 hideLoading();
+                stopStatusPolling();
+                hideEvaluationStatus();
             }
         }
 
@@ -618,9 +730,115 @@
             `).join('');
         }
 
+        function showEvaluationStatus() {
+            document.getElementById('evaluationStatus').style.display = 'block';
+            resetEvaluationStatus();
+        }
+
+        function hideEvaluationStatus() {
+            document.getElementById('evaluationStatus').style.display = 'none';
+        }
+
+        function resetEvaluationStatus() {
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = '0/0';
+            document.getElementById('currentModelName').textContent = 'Initializing...';
+            document.getElementById('currentModelBadge').textContent = 'Starting...';
+            document.getElementById('currentModelBadge').className = 'model-badge';
+            document.getElementById('completedModels').innerHTML = '';
+        }
+
+        async function startStatusPolling() {
+            if (isPolling) return;
+            isPolling = true;
+
+            statusPollingInterval = setInterval(async () => {
+                try {
+                    await updateEvaluationStatus();
+                } catch (error) {
+                    console.error('Status polling error:', error);
+                }
+            }, 1000); // Poll every second
+        }
+
+        function stopStatusPolling() {
+            if (statusPollingInterval) {
+                clearInterval(statusPollingInterval);
+                statusPollingInterval = null;
+            }
+            isPolling = false;
+        }
+
+        async function updateEvaluationStatus() {
+            if (!currentToken) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/evaluation-status`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.data.isEvaluating) {
+                    const status = data.data;
+                    updateProgressDisplay(status);
+                } else if (data.success && !data.data.isEvaluating) {
+                    // Evaluation completed or not running
+                    stopStatusPolling();
+                }
+            } catch (error) {
+                console.error('Failed to fetch evaluation status:', error);
+            }
+        }
+
+        function updateProgressDisplay(status) {
+            // Update progress bar
+            const progress = (status.progress.current / status.progress.total) * 100;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+            document.getElementById('progressText').textContent = `${status.progress.current}/${status.progress.total}`;
+
+            // Update current model
+            if (status.currentModel) {
+                document.getElementById('currentModelName').textContent = status.currentModel.displayName || status.currentModel.model;
+                const badge = document.getElementById('currentModelBadge');
+                badge.textContent = 'Evaluating...';
+                badge.className = 'model-badge evaluating';
+            }
+
+            // Update completed models
+            if (status.models && status.models.length > 0) {
+                updateCompletedModels(status.models);
+            }
+        }
+
+        function updateCompletedModels(models) {
+            const container = document.getElementById('completedModels');
+
+            container.innerHTML = models.map(model => {
+                const statusClass = model.success ? 'success' : 'error';
+                const statusIcon = model.success ? '✅' : '❌';
+                const latency = model.latency ? `${model.latency}ms` : 'N/A';
+                const accuracy = model.accuracy ? `${model.accuracy.toFixed(1)}%` : '0%';
+
+                return `
+                    <div class="mini-model-card ${statusClass}">
+                        <div style="font-weight: bold; margin-bottom: 5px;">
+                            ${statusIcon} ${model.displayName || model.model}
+                        </div>
+                        <div>Latency: ${latency}</div>
+                        <div>Accuracy: ${accuracy}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function clearResults() {
             document.getElementById('resultsContainer').style.display = 'none';
             document.getElementById('historySection').style.display = 'none';
+            hideEvaluationStatus();
+            stopStatusPolling();
         }
     </script>
 </body>

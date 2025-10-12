@@ -6,7 +6,9 @@ This guide helps you get the SLM Business Service Layer running quickly.
 
 - Python 3.8+
 - Node.js 16+
-- Docker & Docker Compose (optional)
+- NeonDB Account (https://neon.tech) - **Required for database**
+- Ollama installed locally
+- Docker & Docker Compose (optional, for ChromaDB)
 
 ## Quick Start
 
@@ -31,27 +33,61 @@ This guide helps you get the SLM Business Service Layer running quickly.
    npm install
    ```
 
-3. **Initialize RAG Database**
+3. **Configure Environment Variables**
+   ```bash
+   # Copy the example file
+   cp env.example .env
+   
+   # Edit .env and add your NeonDB connection string and JWT secret
+   # Required variables:
+   # - POSTGRES_URL: Your NeonDB connection string
+   # - JWT_SECRET: Random string (min 32 chars)
+   nano .env
+   ```
+
+4. **Setup NeonDB Database**
+   ```bash
+   # Get your connection string from https://console.neon.tech
+   # Example: postgresql://user:password@ep-xxxxx.neon.tech/dbname?sslmode=require
+   
+   # Load the database schema
+   psql 'your-neon-connection-string' -f database/schema.sql
+   
+   # Load sample data (optional, for testing)
+   psql 'your-neon-connection-string' -f database/sample_data.sql
+   ```
+
+5. **Start Infrastructure Services**
+   ```bash
+   # Start Ollama
+   ollama serve
+   
+   # In another terminal, pull models
+   ollama pull llama3.2:3b
+   ollama pull phi3:mini
+   
+   # Start ChromaDB (Option A: Docker)
+   docker-compose up -d chromadb
+   
+   # OR ChromaDB (Option B: Local)
+   chroma run --path ./chroma_data
+   ```
+
+6. **Initialize RAG Database**
    ```bash
    # Make sure virtual environment is activated
    source venv/bin/activate
    python3 scripts/init-rag-db.py
    ```
 
-4. **Start Infrastructure Services**
+7. **Start the Application**
    ```bash
-   # Start core services with Docker
-   npm run dev:services
-
-   # Or manually install and start:
-   # - Ollama: curl -fsSL https://ollama.com/install.sh | sh
-   # - ChromaDB: pip install chromadb
-   # - PostgreSQL: brew install postgresql (macOS)
-   # - Redis: brew install redis (macOS)
-   ```
-
-5. **Start the Application**
-   ```bash
+   # With environment variables from .env
+   npm run dev
+   
+   # Or manually set required variables
+   export POSTGRES_URL="your-neon-connection-string"
+   export JWT_SECRET="your-secret-key-minimum-32-characters"
    npm run dev
    ```
 

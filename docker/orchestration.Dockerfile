@@ -22,6 +22,7 @@ RUN npm ci --only=production
 # Copy application source
 COPY src/ ./src/
 COPY config/ ./config/
+COPY test-interface.html ./
 
 # Create necessary directories
 RUN mkdir -p logs data

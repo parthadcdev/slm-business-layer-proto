@@ -4,7 +4,7 @@
  * @author Partha Chandramohan
  * @description Database adapter for PostgreSQL with dynamic query generation based on business requests
  */
-const { Pool } = require('pg');
+const { Pool } = require("pg");
 
 class PostgreSQLAdapter {
   constructor() {
@@ -14,24 +14,37 @@ class PostgreSQLAdapter {
 
   async initialize() {
     try {
-      this.pool = new Pool({
-        user: process.env.POSTGRES_USER || 'app_user',
-        host: process.env.POSTGRES_HOST || 'localhost',
-        database: process.env.POSTGRES_DB || 'business_app',
-        password: process.env.POSTGRES_PASSWORD || 'app_password',
-        port: process.env.POSTGRES_PORT || 5432,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
-      });
+      const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+
+      if (connectionString) {
+        // Use connection string (Neon DB or other cloud providers)
+        this.pool = new Pool({
+          connectionString: connectionString,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        });
+      } else {
+        // Fallback to individual parameters (for local development)
+        this.pool = new Pool({
+          user: process.env.POSTGRES_USER || "app_user",
+          host: process.env.POSTGRES_HOST || "localhost",
+          database: process.env.POSTGRES_DB || "business_app",
+          password: process.env.POSTGRES_PASSWORD || "app_password",
+          port: process.env.POSTGRES_PORT || 5432,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
+        });
+      }
 
       // Test connection
-      await this.pool.query('SELECT NOW()');
+      await this.pool.query("SELECT NOW()");
       this.initialized = true;
-      console.log('PostgreSQL adapter initialized successfully');
+      console.log("PostgreSQL adapter initialized successfully");
     } catch (error) {
-      console.error('Failed to initialize PostgreSQL adapter:', error);
-      throw new Error('PostgreSQL initialization failed');
+      console.error("Failed to initialize PostgreSQL adapter:", error);
+      throw new Error("PostgreSQL initialization failed");
     }
   }
 
@@ -44,7 +57,7 @@ class PostgreSQLAdapter {
       const result = await this.pool.query(sql, params);
       return result.rows;
     } catch (error) {
-      console.error('Database query error:', error);
+      console.error("Database query error:", error);
       throw new Error(`Database query failed: ${error.message}`);
     }
   }
@@ -56,20 +69,42 @@ class PostgreSQLAdapter {
 
     // Extract limit/quantity from request
     const numberWords = {
-      'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-      'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-      'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-      'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
+      eleven: 11,
+      twelve: 12,
+      thirteen: 13,
+      fourteen: 14,
+      fifteen: 15,
+      sixteen: 16,
+      seventeen: 17,
+      eighteen: 18,
+      nineteen: 19,
+      twenty: 20,
     };
 
     // Match numeric digits
-    let limitMatch = requestLower.match(/(?:top|first|show me)\s+(\d+)|(\d+)\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?)/);
+    const limitMatch = requestLower.match(
+      /(?:top|first|show me)\s+(\d+)|(\d+)\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?)/,
+    );
     let limit = limitMatch ? parseInt(limitMatch[1] || limitMatch[2]) : null;
 
     // If no numeric match, try written numbers
     if (!limit) {
-      const wordPattern = Object.keys(numberWords).join('|');
-      const wordMatch = requestLower.match(new RegExp(`(?:top|first|show me)\\s+(${wordPattern})|(${wordPattern})\\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?)`));
+      const wordPattern = Object.keys(numberWords).join("|");
+      const wordMatch = requestLower.match(
+        new RegExp(
+          `(?:top|first|show me)\\s+(${wordPattern})|(${wordPattern})\\s+(?:records?|items?|entries?|orders?|alerts?|customers?|products?)`,
+        ),
+      );
       if (wordMatch) {
         const wordNumber = wordMatch[1] || wordMatch[2];
         limit = numberWords[wordNumber];
@@ -78,62 +113,102 @@ class PostgreSQLAdapter {
 
     try {
       // Order-related queries
-      if ((requestLower.includes('order') || requestLower.includes('stock order')) && (requestLower.includes('list') || requestLower.includes('show'))) {
+      if (
+        (requestLower.includes("order") ||
+          requestLower.includes("stock order")) &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getOrderSummary(limit);
-      }
-      else if ((requestLower.includes('order') || requestLower.includes('stock order')) && requestLower.includes('pending')) {
+      } else if (
+        (requestLower.includes("order") ||
+          requestLower.includes("stock order")) &&
+        requestLower.includes("pending")
+      ) {
         queryResult = await this.getPendingOrders(limit);
-      }
-      else if ((requestLower.includes('order') || requestLower.includes('stock order')) && requestLower.includes('status')) {
+      } else if (
+        (requestLower.includes("order") ||
+          requestLower.includes("stock order")) &&
+        requestLower.includes("status")
+      ) {
         queryResult = await this.getOrdersByStatus(limit);
       }
       // Catch general "stock orders" without specific list/show keywords
-      else if (requestLower.includes('stock order') && !requestLower.includes('low') && !requestLower.includes('alert')) {
+      else if (
+        requestLower.includes("stock order") &&
+        !requestLower.includes("low") &&
+        !requestLower.includes("alert")
+      ) {
         queryResult = await this.getOrderSummary(limit);
       }
 
       // Inventory-related queries
-      else if (requestLower.includes('inventory') && (requestLower.includes('list') || requestLower.includes('show'))) {
+      else if (
+        requestLower.includes("inventory") &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getInventorySummary(limit);
-      }
-      else if (requestLower.includes('low stock') || requestLower.includes('stock alert')) {
+      } else if (
+        requestLower.includes("low stock") ||
+        requestLower.includes("stock alert")
+      ) {
         queryResult = await this.getLowStockAlerts(limit);
-      }
-      else if (requestLower.includes('stock level')) {
+      } else if (requestLower.includes("stock level")) {
         queryResult = await this.getStockLevels(limit);
       }
 
       // Customer-related queries
-      else if (requestLower.includes('customer') && (requestLower.includes('list') || requestLower.includes('show'))) {
+      else if (
+        requestLower.includes("customer") &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getCustomerSummary(limit);
-      }
-      else if (requestLower.includes('customer') && requestLower.includes('premium')) {
+      } else if (
+        requestLower.includes("customer") &&
+        requestLower.includes("premium")
+      ) {
         queryResult = await this.getPremiumCustomers(limit);
       }
       // Customer value analysis queries
-      else if ((requestLower.includes('who') || requestLower.includes('which customer')) &&
-               (requestLower.includes('spent') || requestLower.includes('spend')) &&
-               (requestLower.includes('most') || requestLower.includes('highest') || requestLower.includes('value'))) {
+      else if (
+        (requestLower.includes("who") ||
+          requestLower.includes("which customer")) &&
+        (requestLower.includes("spent") || requestLower.includes("spend")) &&
+        (requestLower.includes("most") ||
+          requestLower.includes("highest") ||
+          requestLower.includes("value"))
+      ) {
         queryResult = await this.getCustomerSummary(limit || 10);
       }
 
       // Product-related queries
-      else if (requestLower.includes('product') && (requestLower.includes('list') || requestLower.includes('show'))) {
+      else if (
+        requestLower.includes("product") &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getProductCatalog(limit);
       }
 
       // Supplier-related queries
-      else if (requestLower.includes('supplier') && (requestLower.includes('list') || requestLower.includes('show'))) {
+      else if (
+        requestLower.includes("supplier") &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getSupplierSummary(limit);
       }
 
       // Warehouse-related queries
-      else if (requestLower.includes('warehouse') && (requestLower.includes('list') || requestLower.includes('show'))) {
+      else if (
+        requestLower.includes("warehouse") &&
+        (requestLower.includes("list") || requestLower.includes("show"))
+      ) {
         queryResult = await this.getWarehouseSummary(limit);
       }
 
       // Financial queries
-      else if (requestLower.includes('sales') && requestLower.includes('summary')) {
+      else if (
+        requestLower.includes("sales") &&
+        requestLower.includes("summary")
+      ) {
         queryResult = await this.getSalesSummary(limit);
       }
 
@@ -143,24 +218,25 @@ class PostgreSQLAdapter {
           data: queryResult.data,
           summary: queryResult.summary,
           query_type: queryResult.type,
-          record_count: queryResult.data.length
+          record_count: queryResult.data.length,
         };
       } else {
         return {
           success: false,
-          message: 'Unable to process this business request with available data queries',
+          message:
+            "Unable to process this business request with available data queries",
           suggestions: [
-            'Try asking about orders, inventory, customers, products, suppliers, or warehouses',
-            'Use keywords like "list", "show", "pending", "low stock", "premium customers"'
-          ]
+            "Try asking about orders, inventory, customers, products, suppliers, or warehouses",
+            'Use keywords like "list", "show", "pending", "low stock", "premium customers"',
+          ],
         };
       }
     } catch (error) {
-      console.error('Error processing business request:', error);
+      console.error("Error processing business request:", error);
       return {
         success: false,
         error: error.message,
-        message: 'Database query failed'
+        message: "Database query failed",
       };
     }
   }
@@ -183,9 +259,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql, [limit]);
     return {
-      type: 'order_summary',
+      type: "order_summary",
       summary: `Found ${data.length} recent orders`,
-      data: data
+      data: data,
     };
   }
 
@@ -206,9 +282,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'pending_orders',
+      type: "pending_orders",
       summary: `Found ${data.length} pending orders requiring attention`,
-      data: data
+      data: data,
     };
   }
 
@@ -225,9 +301,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'order_status_summary',
+      type: "order_status_summary",
       summary: `Order status breakdown across all orders`,
-      data: data
+      data: data,
     };
   }
 
@@ -259,9 +335,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql, [limit]);
     return {
-      type: 'inventory_summary',
+      type: "inventory_summary",
       summary: `Current inventory levels for ${data.length} products`,
-      data: data
+      data: data,
     };
   }
 
@@ -297,9 +373,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql, params);
     return {
-      type: 'low_stock_alerts',
+      type: "low_stock_alerts",
       summary: `${data.length} products require immediate attention due to low stock`,
-      data: data
+      data: data,
     };
   }
 
@@ -321,9 +397,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'stock_levels_by_warehouse',
+      type: "stock_levels_by_warehouse",
       summary: `Stock levels across ${data.length} active warehouses`,
-      data: data
+      data: data,
     };
   }
 
@@ -347,9 +423,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql, [limit]);
     return {
-      type: 'customer_summary',
+      type: "customer_summary",
       summary: `Top ${data.length} customers by total spending`,
-      data: data
+      data: data,
     };
   }
 
@@ -371,9 +447,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'premium_customers',
+      type: "premium_customers",
       summary: `${data.length} premium customers in the system`,
-      data: data
+      data: data,
     };
   }
 
@@ -398,9 +474,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'product_catalog',
+      type: "product_catalog",
       summary: `Active product catalog with ${data.length} products`,
-      data: data
+      data: data,
     };
   }
 
@@ -424,9 +500,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'supplier_summary',
+      type: "supplier_summary",
       summary: `${data.length} active suppliers ranked by performance`,
-      data: data
+      data: data,
     };
   }
 
@@ -448,9 +524,9 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'warehouse_summary',
+      type: "warehouse_summary",
       summary: `${data.length} warehouses with inventory distribution`,
-      data: data
+      data: data,
     };
   }
 
@@ -471,28 +547,31 @@ class PostgreSQLAdapter {
 
     const data = await this.query(sql);
     return {
-      type: 'sales_summary',
+      type: "sales_summary",
       summary: `Sales performance over the last ${data.length} days`,
-      data: data
+      data: data,
     };
   }
 
   async checkHealth() {
     try {
       if (!this.initialized) {
-        return { healthy: false, error: 'Not initialized' };
+        return { healthy: false, error: "Not initialized" };
       }
 
-      const result = await this.query('SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = $1', ['public']);
+      const result = await this.query(
+        "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = $1",
+        ["public"],
+      );
       return {
         healthy: true,
-        connection: 'active',
-        tables: result[0].table_count
+        connection: "active",
+        tables: result[0].table_count,
       };
     } catch (error) {
       return {
         healthy: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -501,7 +580,7 @@ class PostgreSQLAdapter {
     if (this.pool) {
       await this.pool.end();
       this.initialized = false;
-      console.log('PostgreSQL connection pool closed');
+      console.log("PostgreSQL connection pool closed");
     }
   }
 }

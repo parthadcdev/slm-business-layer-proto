@@ -4,14 +4,40 @@
  * @author Partha Chandramohan
  * @description User context and session management for enriching requests with user profile, permissions, and system state
  */
-const redis = require('redis');
+const redis = require("redis");
 
 class ContextManager {
   constructor() {
-    this.redis = redis.createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379'
-    });
-    this.redis.connect().catch(console.error);
+    this.redisConnected = false;
+    this.sessionStore = new Map(); // Initialize in-memory storage
+    
+    try {
+      this.redis = redis.createClient({
+        url: process.env.REDIS_URL || "redis://localhost:6379",
+        socket: {
+          reconnectStrategy: () => false, // Don't auto-reconnect
+        },
+      });
+      
+      // Handle Redis errors gracefully
+      this.redis.on('error', (error) => {
+        console.warn("[ContextManager] Redis error, using in-memory fallback:", error.message);
+        this.redisConnected = false;
+      });
+      
+      this.redis.connect()
+        .then(() => {
+          this.redisConnected = true;
+          console.log("[ContextManager] Redis connected successfully");
+        })
+        .catch((error) => {
+          console.warn("[ContextManager] Redis connection failed, using in-memory fallback:", error.message);
+          this.redisConnected = false;
+        });
+    } catch (error) {
+      console.warn("[ContextManager] Failed to initialize Redis client, using in-memory fallback:", error.message);
+      this.redis = null;
+    }
   }
 
   async enrichContext(baseContext, user) {
@@ -25,13 +51,13 @@ class ContextManager {
       const enrichedContext = {
         ...baseContext,
         sessionId,
-        userRole: user?.role || 'guest',
+        userRole: user?.role || "guest",
         userId: user?.id || null,
         timestamp: new Date().toISOString(),
         requestCount: (sessionData?.requestCount || 0) + 1,
         lastActivity: sessionData?.lastActivity || null,
         userPermissions: user?.permissions || [],
-        sessionHistory: sessionData?.history || []
+        sessionHistory: sessionData?.history || [],
       };
 
       // Update session data
@@ -39,18 +65,26 @@ class ContextManager {
 
       return enrichedContext;
     } catch (error) {
-      console.error('Error enriching context:', error);
-      throw new Error('Failed to enrich context');
+      console.error("Error enriching context:", error);
+      throw new Error("Failed to enrich context");
     }
   }
 
   async getSessionData(sessionId) {
     try {
-      const data = await this.redis.get(`session:${sessionId}`);
-      return data ? JSON.parse(data) : null;
+      if (this.redis && this.redisConnected) {
+        const data = await this.redis.get(`session:${sessionId}`);
+        return data ? JSON.parse(data) : null;
+      } else {
+        // Use in-memory fallback
+        const data = this.sessionStore?.get(sessionId);
+        return data || null;
+      }
     } catch (error) {
-      console.error('Error getting session data:', error);
-      return null;
+      console.error("Error getting session data:", error);
+      // Fall back to in-memory
+      const data = this.sessionStore?.get(sessionId);
+      return data || null;
     }
   }
 
@@ -65,18 +99,31 @@ class ContextManager {
           ...(context.sessionHistory || []).slice(-9), // Keep last 10 entries
           {
             timestamp: context.timestamp,
-            requestCount: context.requestCount
-          }
-        ]
+            requestCount: context.requestCount,
+          },
+        ],
       };
 
-      await this.redis.setEx(
-        `session:${sessionId}`,
-        3600 * 24, // 24 hours TTL
-        JSON.stringify(sessionData)
-      );
+      if (this.redis && this.redisConnected) {
+        await this.redis.setEx(
+          `session:${sessionId}`,
+          3600 * 24, // 24 hours TTL
+          JSON.stringify(sessionData),
+        );
+      } else {
+        // Use in-memory fallback
+        if (!this.sessionStore) {
+          this.sessionStore = new Map();
+        }
+        this.sessionStore.set(sessionId, sessionData);
+      }
     } catch (error) {
-      console.error('Error updating session data:', error);
+      console.error("Error updating session data:", error);
+      // Fall back to in-memory on error
+      if (!this.sessionStore) {
+        this.sessionStore = new Map();
+      }
+      this.sessionStore.set(sessionId, sessionData);
     }
   }
 
@@ -88,7 +135,7 @@ class ContextManager {
     try {
       await this.redis.del(`session:${sessionId}`);
     } catch (error) {
-      console.error('Error clearing session:', error);
+      console.error("Error clearing session:", error);
     }
   }
 }

@@ -4,16 +4,19 @@
  * @author Partha Chandramohan
  * @description Advanced input validation and sanitization for AI interactions and user inputs
  */
-const securityConfig = require('../config/security-config');
-const errorHandler = require('../utils/error-handler');
+const securityConfig = require("../config/security-config");
+const errorHandler = require("../utils/error-handler");
 
 class InputValidator {
   constructor() {
     try {
-      this.aiConfig = securityConfig.get('ai') || {};
-      this.validationConfig = securityConfig.get('validation') || {};
+      this.aiConfig = securityConfig.get("ai") || {};
+      this.validationConfig = securityConfig.get("validation") || {};
     } catch (error) {
-      console.warn('Security config not available, using defaults:', error.message);
+      console.warn(
+        "Security config not available, using defaults:",
+        error.message,
+      );
       this.aiConfig = {};
       this.validationConfig = {};
     }
@@ -25,7 +28,7 @@ class InputValidator {
     return {
       businessRequest: {
         required: true,
-        type: 'string',
+        type: "string",
         minLength: 1,
         maxLength: this.aiConfig.maxPromptLength || 10000,
         patterns: {
@@ -39,51 +42,57 @@ class InputValidator {
             // Command injection
             /(\||&&|;|\$\(|\`)/g,
             // Excessive special characters
-            /[<>\"']{5,}/g
-          ]
-        }
+            /[<>\"']{5,}/g,
+          ],
+        },
       },
 
       userContext: {
         required: false,
-        type: 'object',
+        type: "object",
         maxProperties: 20,
         allowedProperties: [
-          'filters', 'preferences', 'session', 'metadata',
-          'timezone', 'locale', 'theme', 'workspace'
-        ]
+          "filters",
+          "preferences",
+          "session",
+          "metadata",
+          "timezone",
+          "locale",
+          "theme",
+          "workspace",
+        ],
       },
 
       apiKey: {
         required: false,
-        type: 'string',
+        type: "string",
         minLength: 16,
         maxLength: 256,
-        pattern: /^[a-zA-Z0-9\-_\.]+$/
+        pattern: /^[a-zA-Z0-9\-_\.]+$/,
       },
 
       userId: {
         required: false,
-        type: 'string',
+        type: "string",
         minLength: 1,
         maxLength: 100,
-        pattern: /^[a-zA-Z0-9\-_@\.]+$/
+        pattern: /^[a-zA-Z0-9\-_@\.]+$/,
       },
 
       email: {
         required: false,
-        type: 'string',
+        type: "string",
         maxLength: 256,
-        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
       },
 
       filename: {
         required: false,
-        type: 'string',
+        type: "string",
         maxLength: 255,
         pattern: /^[a-zA-Z0-9\-_\.\s]+$/,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'csv', 'json']
-      }
+        allowedExtensions: ["pdf", "doc", "docx", "txt", "csv", "json"],
+      },
     };
   }
 
@@ -95,7 +104,7 @@ class InputValidator {
       removeComments: /<!--[\s\S]*?-->/g,
       normalizeWhitespace: /\s+/g,
       removeControlChars: /[\x00-\x1F\x7F]/g,
-      removeSqlComments: /(\/\*[\s\S]*?\*\/|--.*$)/gm
+      removeSqlComments: /(\/\*[\s\S]*?\*\/|--.*$)/gm,
     };
   }
 
@@ -107,7 +116,10 @@ class InputValidator {
 
     try {
       // Basic validation
-      const basicValidation = this.validateBasic(request, this.validationRules.businessRequest);
+      const basicValidation = this.validateBasic(
+        request,
+        this.validationRules.businessRequest,
+      );
       if (!basicValidation.valid) {
         return basicValidation;
       }
@@ -128,12 +140,11 @@ class InputValidator {
       }
 
       return result;
-
     } catch (error) {
       return {
         valid: false,
         errors: [`Validation error: ${error.message}`],
-        sanitized: null
+        sanitized: null,
       };
     }
   }
@@ -150,11 +161,11 @@ class InputValidator {
 
     try {
       // Type validation
-      if (typeof context !== 'object' || Array.isArray(context)) {
+      if (typeof context !== "object" || Array.isArray(context)) {
         return {
           valid: false,
-          errors: ['Context must be an object'],
-          sanitized: null
+          errors: ["Context must be an object"],
+          sanitized: null,
         };
       }
 
@@ -163,8 +174,10 @@ class InputValidator {
       if (propertyCount > this.validationRules.userContext.maxProperties) {
         return {
           valid: false,
-          errors: [`Too many context properties: ${propertyCount} > ${this.validationRules.userContext.maxProperties}`],
-          sanitized: null
+          errors: [
+            `Too many context properties: ${propertyCount} > ${this.validationRules.userContext.maxProperties}`,
+          ],
+          sanitized: null,
         };
       }
 
@@ -186,17 +199,19 @@ class InputValidator {
 
       result.sanitized = sanitizedContext;
 
-      if (result.errors.length > 0 && result.errors.length >= Object.keys(context).length) {
+      if (
+        result.errors.length > 0 &&
+        result.errors.length >= Object.keys(context).length
+      ) {
         result.valid = false;
       }
 
       return result;
-
     } catch (error) {
       return {
         valid: false,
         errors: [`Context validation error: ${error.message}`],
-        sanitized: null
+        sanitized: null,
       };
     }
   }
@@ -209,18 +224,23 @@ class InputValidator {
 
     try {
       // Validate filename
-      const filenameValidation = this.validateBasic(file.filename, this.validationRules.filename);
+      const filenameValidation = this.validateBasic(
+        file.filename,
+        this.validationRules.filename,
+      );
       if (!filenameValidation.valid) {
         return filenameValidation;
       }
 
       // Check file extension
-      const extension = file.filename.split('.').pop().toLowerCase();
-      if (!this.validationRules.filename.allowedExtensions.includes(extension)) {
+      const extension = file.filename.split(".").pop().toLowerCase();
+      if (
+        !this.validationRules.filename.allowedExtensions.includes(extension)
+      ) {
         return {
           valid: false,
           errors: [`File type not allowed: ${extension}`],
-          sanitized: null
+          sanitized: null,
         };
       }
 
@@ -228,8 +248,10 @@ class InputValidator {
       if (file.size > this.validationConfig.maxFileSize) {
         return {
           valid: false,
-          errors: [`File too large: ${file.size} > ${this.validationConfig.maxFileSize}`],
-          sanitized: null
+          errors: [
+            `File too large: ${file.size} > ${this.validationConfig.maxFileSize}`,
+          ],
+          sanitized: null,
         };
       }
 
@@ -242,12 +264,11 @@ class InputValidator {
       }
 
       return result;
-
     } catch (error) {
       return {
         valid: false,
         errors: [`File validation error: ${error.message}`],
-        sanitized: null
+        sanitized: null,
       };
     }
   }
@@ -259,11 +280,14 @@ class InputValidator {
     const result = { valid: true, errors: [], sanitized: value };
 
     // Required check
-    if (rules.required && (value === null || value === undefined || value === '')) {
+    if (
+      rules.required &&
+      (value === null || value === undefined || value === "")
+    ) {
       return {
         valid: false,
-        errors: ['Value is required'],
-        sanitized: null
+        errors: ["Value is required"],
+        sanitized: null,
       };
     }
 
@@ -277,24 +301,28 @@ class InputValidator {
       return {
         valid: false,
         errors: [`Expected type ${rules.type}, got ${typeof value}`],
-        sanitized: null
+        sanitized: null,
       };
     }
 
     // String-specific validations
-    if (rules.type === 'string' && typeof value === 'string') {
+    if (rules.type === "string" && typeof value === "string") {
       if (rules.minLength && value.length < rules.minLength) {
-        result.errors.push(`Minimum length ${rules.minLength}, got ${value.length}`);
+        result.errors.push(
+          `Minimum length ${rules.minLength}, got ${value.length}`,
+        );
         result.valid = false;
       }
 
       if (rules.maxLength && value.length > rules.maxLength) {
-        result.errors.push(`Maximum length ${rules.maxLength}, got ${value.length}`);
+        result.errors.push(
+          `Maximum length ${rules.maxLength}, got ${value.length}`,
+        );
         result.valid = false;
       }
 
       if (rules.pattern && !rules.pattern.test(value)) {
-        result.errors.push('Value does not match required pattern');
+        result.errors.push("Value does not match required pattern");
         result.valid = false;
       }
 
@@ -302,7 +330,7 @@ class InputValidator {
       if (rules.patterns && rules.patterns.forbidden) {
         for (const pattern of rules.patterns.forbidden) {
           if (pattern.test(value)) {
-            result.errors.push('Value contains forbidden pattern');
+            result.errors.push("Value contains forbidden pattern");
             result.valid = false;
             break;
           }
@@ -318,18 +346,18 @@ class InputValidator {
    */
   validateAIPrompt(prompt) {
     // Use security config's prompt validation if available
-    if (securityConfig.get && securityConfig.get('ai').validatePrompt) {
+    if (securityConfig.get && securityConfig.get("ai").validatePrompt) {
       try {
-        const validation = securityConfig.get('ai').validatePrompt(prompt);
+        const validation = securityConfig.get("ai").validatePrompt(prompt);
         if (!validation.valid) {
           return {
             valid: false,
-            errors: [validation.reason || 'AI prompt validation failed'],
-            sanitized: null
+            errors: [validation.reason || "AI prompt validation failed"],
+            sanitized: null,
           };
         }
       } catch (error) {
-        console.warn('AI prompt validation failed:', error.message);
+        console.warn("AI prompt validation failed:", error.message);
       }
     }
 
@@ -348,15 +376,15 @@ class InputValidator {
       /how\s+(were\s+)?you\s+(programmed|trained|configured)/gi,
 
       // Excessive repetition (potential DoS)
-      /(.{1,10})\1{10,}/gi
+      /(.{1,10})\1{10,}/gi,
     ];
 
     for (const pattern of businessPatterns) {
       if (pattern.test(prompt)) {
         return {
           valid: false,
-          errors: ['Prompt contains potentially malicious content'],
-          sanitized: null
+          errors: ["Prompt contains potentially malicious content"],
+          sanitized: null,
         };
       }
     }
@@ -372,20 +400,28 @@ class InputValidator {
 
     // Remove HTML tags if HTML sanitization is enabled
     if (this.validationConfig.sanitizeHtml) {
-      sanitized = sanitized.replace(this.sanitizationRules.removeHtmlTags, '');
-      sanitized = sanitized.replace(this.sanitizationRules.removeScriptTags, '');
-      sanitized = sanitized.replace(this.sanitizationRules.removeStyleTags, '');
-      sanitized = sanitized.replace(this.sanitizationRules.removeComments, '');
+      sanitized = sanitized.replace(this.sanitizationRules.removeHtmlTags, "");
+      sanitized = sanitized.replace(
+        this.sanitizationRules.removeScriptTags,
+        "",
+      );
+      sanitized = sanitized.replace(this.sanitizationRules.removeStyleTags, "");
+      sanitized = sanitized.replace(this.sanitizationRules.removeComments, "");
     }
 
     // Remove control characters
-    sanitized = sanitized.replace(this.sanitizationRules.removeControlChars, '');
+    sanitized = sanitized.replace(
+      this.sanitizationRules.removeControlChars,
+      "",
+    );
 
     // Normalize whitespace
-    sanitized = sanitized.replace(this.sanitizationRules.normalizeWhitespace, ' ').trim();
+    sanitized = sanitized
+      .replace(this.sanitizationRules.normalizeWhitespace, " ")
+      .trim();
 
     // Remove SQL comments
-    sanitized = sanitized.replace(this.sanitizationRules.removeSqlComments, '');
+    sanitized = sanitized.replace(this.sanitizationRules.removeSqlComments, "");
 
     return sanitized;
   }
@@ -396,36 +432,32 @@ class InputValidator {
   checkSecurityPatterns(input) {
     const securityPatterns = [
       {
-        name: 'SQL Injection',
+        name: "SQL Injection",
         patterns: [
           /(\b(union|select|insert|update|delete|drop|create|alter)\s+.*\s+(from|into|set|table)\b)/gi,
           /(;\s*drop\s+table)/gi,
-          /(\'\s*or\s+\'\d+\'\s*=\s*\'\d+)/gi
-        ]
+          /(\'\s*or\s+\'\d+\'\s*=\s*\'\d+)/gi,
+        ],
       },
       {
-        name: 'XSS',
+        name: "XSS",
         patterns: [
           /<script[^>]*>[\s\S]*?<\/script>/gi,
           /javascript:/gi,
-          /on\w+\s*=\s*["'][^"']*["']/gi
-        ]
+          /on\w+\s*=\s*["'][^"']*["']/gi,
+        ],
       },
       {
-        name: 'Path Traversal',
-        patterns: [
-          /(\.\.\/|\.\.\\)/g,
-          /%2e%2e%2f/gi,
-          /\.\.\%2f/gi
-        ]
+        name: "Path Traversal",
+        patterns: [/(\.\.\/|\.\.\\)/g, /%2e%2e%2f/gi, /\.\.\%2f/gi],
       },
       {
-        name: 'Command Injection',
+        name: "Command Injection",
         patterns: [
           /(\||&&|;|\$\(|\`)/g,
-          /\b(ls|cat|ps|whoami|id|pwd|uname)\b/g
-        ]
-      }
+          /\b(ls|cat|ps|whoami|id|pwd|uname)\b/g,
+        ],
+      },
     ];
 
     for (const category of securityPatterns) {
@@ -434,7 +466,7 @@ class InputValidator {
           return {
             valid: false,
             errors: [`Potential ${category.name} detected`],
-            sanitized: null
+            sanitized: null,
           };
         }
       }
@@ -447,8 +479,10 @@ class InputValidator {
    * Check if context property is allowed
    */
   isAllowedContextProperty(property) {
-    return this.validationRules.userContext.allowedProperties.includes(property) ||
-           /^[a-zA-Z][a-zA-Z0-9_]*$/.test(property); // Allow simple alphanumeric properties
+    return (
+      this.validationRules.userContext.allowedProperties.includes(property) ||
+      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(property)
+    ); // Allow simple alphanumeric properties
   }
 
   /**
@@ -459,32 +493,34 @@ class InputValidator {
       return value;
     }
 
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // Limit string length
       if (value.length > 1000) {
         return value.substring(0, 1000);
       }
 
       // Remove control characters
-      return value.replace(this.sanitizationRules.removeControlChars, '');
+      return value.replace(this.sanitizationRules.removeControlChars, "");
     }
 
-    if (typeof value === 'number') {
+    if (typeof value === "number") {
       // Ensure number is finite
       return isFinite(value) ? value : null;
     }
 
-    if (typeof value === 'boolean') {
+    if (typeof value === "boolean") {
       return value;
     }
 
     if (Array.isArray(value)) {
       // Limit array size and sanitize elements
-      const sanitizedArray = value.slice(0, 100).map(item => this.sanitizeContextValue(item));
-      return sanitizedArray.filter(item => item !== null);
+      const sanitizedArray = value
+        .slice(0, 100)
+        .map((item) => this.sanitizeContextValue(item));
+      return sanitizedArray.filter((item) => item !== null);
     }
 
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       // Recursively sanitize object properties
       const sanitizedObject = {};
       let propertyCount = 0;
@@ -492,7 +528,10 @@ class InputValidator {
       for (const [key, val] of Object.entries(value)) {
         if (propertyCount >= 50) break; // Limit object properties
 
-        const sanitizedKey = key.replace(this.sanitizationRules.removeControlChars, '');
+        const sanitizedKey = key.replace(
+          this.sanitizationRules.removeControlChars,
+          "",
+        );
         const sanitizedVal = this.sanitizeContextValue(val);
 
         if (sanitizedVal !== null) {
@@ -517,46 +556,48 @@ class InputValidator {
     if (content.length > maxContentLength) {
       return {
         valid: false,
-        errors: [`File content too large: ${content.length} > ${maxContentLength}`],
-        sanitized: null
+        errors: [
+          `File content too large: ${content.length} > ${maxContentLength}`,
+        ],
+        sanitized: null,
       };
     }
 
     // Extension-specific validation
     switch (extension) {
-      case 'json':
+      case "json":
         try {
           JSON.parse(content);
         } catch (error) {
           return {
             valid: false,
-            errors: ['Invalid JSON content'],
-            sanitized: null
+            errors: ["Invalid JSON content"],
+            sanitized: null,
           };
         }
         break;
 
-      case 'csv':
+      case "csv":
         // Basic CSV validation
-        const lines = content.split('\n');
+        const lines = content.split("\n");
         if (lines.length > 10000) {
           return {
             valid: false,
-            errors: ['CSV file has too many lines'],
-            sanitized: null
+            errors: ["CSV file has too many lines"],
+            sanitized: null,
           };
         }
         break;
     }
 
     // Check for binary content in text files
-    if (['txt', 'csv', 'json'].includes(extension)) {
+    if (["txt", "csv", "json"].includes(extension)) {
       const binaryPattern = /[\x00-\x08\x0E-\x1F\x7F]/;
       if (binaryPattern.test(content)) {
         return {
           valid: false,
-          errors: ['Text file contains binary content'],
-          sanitized: null
+          errors: ["Text file contains binary content"],
+          sanitized: null,
         };
       }
     }
@@ -567,20 +608,20 @@ class InputValidator {
   /**
    * Express middleware for input validation
    */
-  createValidationMiddleware(validationType = 'businessRequest') {
+  createValidationMiddleware(validationType = "businessRequest") {
     return (req, res, next) => {
       try {
         let validationResult;
 
         switch (validationType) {
-          case 'businessRequest':
+          case "businessRequest":
             validationResult = this.validateBusinessRequest(req.body.request);
             if (validationResult.valid) {
               req.body.request = validationResult.sanitized;
             }
             break;
 
-          case 'userContext':
+          case "userContext":
             validationResult = this.validateUserContext(req.body.context);
             if (validationResult.valid) {
               req.body.context = validationResult.sanitized;
@@ -588,30 +629,31 @@ class InputValidator {
             break;
 
           default:
-            return next(errorHandler.createError(
-              'Unknown validation type',
-              errorHandler.errorCategories.VALIDATION
-            ));
+            return next(
+              errorHandler.createError(
+                "Unknown validation type",
+                errorHandler.errorCategories.VALIDATION,
+              ),
+            );
         }
 
         if (!validationResult.valid) {
           const error = errorHandler.createError(
-            validationResult.errors.join('; '),
+            validationResult.errors.join("; "),
             errorHandler.errorCategories.VALIDATION,
             errorHandler.severityLevels.MEDIUM,
-            { validationType, errors: validationResult.errors }
+            { validationType, errors: validationResult.errors },
           );
           return next(error);
         }
 
         next();
-
       } catch (error) {
         const validationError = errorHandler.createError(
-          'Input validation failed',
+          "Input validation failed",
           errorHandler.errorCategories.VALIDATION,
           errorHandler.severityLevels.HIGH,
-          { originalError: error.message }
+          { originalError: error.message },
         );
         next(validationError);
       }

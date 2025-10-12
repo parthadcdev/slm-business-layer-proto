@@ -4,9 +4,9 @@
  * @author Partha Chandramohan
  * @description High-level interface for vector database operations and semantic search with ChromaDB
  */
-const chromaClient = require('./chromadb-client');
-const embeddingService = require('./embedding-service');
-const chunkProcessor = require('./chunk-processor');
+const chromaClient = require("./chromadb-client");
+const embeddingService = require("./embedding-service");
+const chunkProcessor = require("./chunk-processor");
 
 class VectorStore {
   constructor() {
@@ -21,10 +21,10 @@ class VectorStore {
       await this.client.initialize();
       await this.embeddingService.checkServiceHealth();
       this.initialized = true;
-      console.log('Vector store initialized successfully');
+      console.log("Vector store initialized successfully");
     } catch (error) {
-      console.error('Failed to initialize vector store:', error);
-      throw new Error('Vector store initialization failed');
+      console.error("Failed to initialize vector store:", error);
+      throw new Error("Vector store initialization failed");
     }
   }
 
@@ -34,19 +34,16 @@ class VectorStore {
     }
 
     try {
-      const {
-        generateEmbeddings = true,
-        chunkOptions = {}
-      } = options;
+      const { generateEmbeddings = true, chunkOptions = {} } = options;
 
       // Process document into chunks
       const processedResult = await this.chunkProcessor.processDocumentChunks(
         document,
-        { generateEmbeddings, ...chunkOptions }
+        { generateEmbeddings, ...chunkOptions },
       );
 
       // Prepare documents for storage
-      const documentsToStore = processedResult.chunks.map(chunk => ({
+      const documentsToStore = processedResult.chunks.map((chunk) => ({
         content: chunk.content,
         metadata: {
           ...chunk.metadata,
@@ -54,30 +51,32 @@ class VectorStore {
           chunk_index: chunk.chunk_index,
           chunk_type: chunk.type,
           source_document: document.metadata.filename,
-          document_type: document.metadata.type || 'unknown',
+          document_type: document.metadata.type || "unknown",
           keywords: chunk.keywords,
           entities: chunk.entities,
           readability: chunk.readability,
           structure: chunk.structure,
-          added_at: new Date().toISOString()
+          added_at: new Date().toISOString(),
         },
-        embedding: chunk.embedding
+        embedding: chunk.embedding,
       }));
 
       // Store in vector database
       const result = await this.client.addDocuments(documentsToStore);
 
-      console.log(`Added document ${document.metadata.filename} with ${documentsToStore.length} chunks`);
+      console.log(
+        `Added document ${document.metadata.filename} with ${documentsToStore.length} chunks`,
+      );
 
       return {
         success: true,
         documentId: document.metadata.filename,
         chunksAdded: documentsToStore.length,
         chunkIds: result.ids,
-        metadata: processedResult.metadata
+        metadata: processedResult.metadata,
       };
     } catch (error) {
-      console.error('Error adding document to vector store:', error);
+      console.error("Error adding document to vector store:", error);
       throw new Error(`Failed to add document: ${error.message}`);
     }
   }
@@ -93,14 +92,14 @@ class VectorStore {
         threshold = 0.0,
         filters = {},
         includeMetadata = true,
-        rerank = true
+        rerank = true,
       } = options;
 
       // Perform vector search
       const results = await this.client.search(query, {
         topK: Math.min(topK * 2, 20), // Get more results for potential reranking
         threshold,
-        filters
+        filters,
       });
 
       if (results.length === 0) {
@@ -123,7 +122,7 @@ class VectorStore {
 
       return finalResults;
     } catch (error) {
-      console.error('Error searching vector store:', error);
+      console.error("Error searching vector store:", error);
       throw new Error(`Search failed: ${error.message}`);
     }
   }
@@ -135,12 +134,12 @@ class VectorStore {
         threshold: context.minSimilarity || 0.3,
         filters: this.buildContextFilters(context),
         includeMetadata: true,
-        rerank: true
+        rerank: true,
       };
 
       const results = await this.search(query, searchOptions);
 
-      return results.map(result => ({
+      return results.map((result) => ({
         content: result.content,
         source: result.metadata.source_document,
         type: result.metadata.document_type,
@@ -148,14 +147,14 @@ class VectorStore {
         chunkInfo: {
           id: result.metadata.chunk_id,
           index: result.metadata.chunk_index,
-          type: result.metadata.chunk_type
+          type: result.metadata.chunk_type,
         },
         keywords: result.metadata.keywords,
         entities: result.metadata.entities,
-        metadata: result.metadata
+        metadata: result.metadata,
       }));
     } catch (error) {
-      console.error('Error retrieving relevant documents:', error);
+      console.error("Error retrieving relevant documents:", error);
       return [];
     }
   }
@@ -175,7 +174,7 @@ class VectorStore {
       // Add date range filtering if needed
       filters.added_at = {
         $gte: context.dateRange.start,
-        $lte: context.dateRange.end
+        $lte: context.dateRange.end,
       };
     }
 
@@ -187,46 +186,52 @@ class VectorStore {
       // Simple reranking based on keyword overlap and context relevance
       const queryWords = query.toLowerCase().split(/\s+/);
 
-      return results.map(result => {
-        let score = result.score;
+      return results
+        .map((result) => {
+          let score = result.score;
 
-        // Boost score based on keyword matches
-        if (result.metadata.keywords) {
-          const keywordMatches = result.metadata.keywords.filter(kw =>
-            queryWords.some(qw => qw.includes(kw.word) || kw.word.includes(qw))
-          );
-          score += keywordMatches.length * 0.1;
-        }
+          // Boost score based on keyword matches
+          if (result.metadata.keywords) {
+            const keywordMatches = result.metadata.keywords.filter((kw) =>
+              queryWords.some(
+                (qw) => qw.includes(kw.word) || kw.word.includes(qw),
+              ),
+            );
+            score += keywordMatches.length * 0.1;
+          }
 
-        // Boost score based on document type relevance
-        if (result.metadata.document_type === 'business-requirement') {
-          score += 0.2;
-        }
+          // Boost score based on document type relevance
+          if (result.metadata.document_type === "business-requirement") {
+            score += 0.2;
+          }
 
-        // Boost score based on chunk type
-        if (result.metadata.chunk_type === 'section' &&
-            result.metadata.section_type === 'requirements') {
-          score += 0.15;
-        }
+          // Boost score based on chunk type
+          if (
+            result.metadata.chunk_type === "section" &&
+            result.metadata.section_type === "requirements"
+          ) {
+            score += 0.15;
+          }
 
-        return {
-          ...result,
-          score: Math.min(score, 1.0),
-          reranked: true
-        };
-      }).sort((a, b) => b.score - a.score);
+          return {
+            ...result,
+            score: Math.min(score, 1.0),
+            reranked: true,
+          };
+        })
+        .sort((a, b) => b.score - a.score);
     } catch (error) {
-      console.error('Error reranking results:', error);
+      console.error("Error reranking results:", error);
       return results;
     }
   }
 
   enrichSearchResults(results, query) {
-    return results.map(result => ({
+    return results.map((result) => ({
       ...result,
       queryContext: this.extractQueryContext(result.content, query),
       relevanceExplanation: this.generateRelevanceExplanation(result, query),
-      confidence: this.calculateConfidence(result)
+      confidence: this.calculateConfidence(result),
     }));
   }
 
@@ -255,25 +260,27 @@ class VectorStore {
     const explanations = [];
 
     if (result.score > 0.8) {
-      explanations.push('High semantic similarity');
+      explanations.push("High semantic similarity");
     }
 
     if (result.metadata.keywords) {
       const queryWords = query.toLowerCase().split(/\s+/);
-      const matchingKeywords = result.metadata.keywords.filter(kw =>
-        queryWords.some(qw => qw.includes(kw.word) || kw.word.includes(qw))
+      const matchingKeywords = result.metadata.keywords.filter((kw) =>
+        queryWords.some((qw) => qw.includes(kw.word) || kw.word.includes(qw)),
       );
 
       if (matchingKeywords.length > 0) {
-        explanations.push(`Keyword matches: ${matchingKeywords.map(kw => kw.word).join(', ')}`);
+        explanations.push(
+          `Keyword matches: ${matchingKeywords.map((kw) => kw.word).join(", ")}`,
+        );
       }
     }
 
-    if (result.metadata.document_type === 'business-requirement') {
-      explanations.push('Business requirement document');
+    if (result.metadata.document_type === "business-requirement") {
+      explanations.push("Business requirement document");
     }
 
-    return explanations.join('; ');
+    return explanations.join("; ");
   }
 
   calculateConfidence(result) {
@@ -285,7 +292,7 @@ class VectorStore {
     }
 
     // Boost confidence for business-relevant content
-    if (result.metadata.document_type === 'business-requirement') {
+    if (result.metadata.document_type === "business-requirement") {
       confidence += 0.15;
     }
 
@@ -299,11 +306,15 @@ class VectorStore {
 
   async updateDocument(documentId, newContent, metadata = {}) {
     try {
-      const result = await this.client.updateDocument(documentId, newContent, metadata);
+      const result = await this.client.updateDocument(
+        documentId,
+        newContent,
+        metadata,
+      );
       console.log(`Updated document: ${documentId}`);
       return result;
     } catch (error) {
-      console.error('Error updating document:', error);
+      console.error("Error updating document:", error);
       throw new Error(`Failed to update document: ${error.message}`);
     }
   }
@@ -314,7 +325,7 @@ class VectorStore {
       console.log(`Deleted document: ${documentId}`);
       return result;
     } catch (error) {
-      console.error('Error deleting document:', error);
+      console.error("Error deleting document:", error);
       throw new Error(`Failed to delete document: ${error.message}`);
     }
   }
@@ -327,10 +338,10 @@ class VectorStore {
       return {
         ...stats,
         embeddingService: embeddingHealth,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Error getting vector store stats:', error);
+      console.error("Error getting vector store stats:", error);
       return null;
     }
   }
@@ -340,19 +351,19 @@ class VectorStore {
       const { limit = 100, offset = 0 } = options;
       return await this.client.listDocuments(limit, offset);
     } catch (error) {
-      console.error('Error listing documents:', error);
-      throw new Error('Failed to list documents');
+      console.error("Error listing documents:", error);
+      throw new Error("Failed to list documents");
     }
   }
 
   async clearStore() {
     try {
       const result = await this.client.clearCollection();
-      console.log('Vector store cleared');
+      console.log("Vector store cleared");
       return result;
     } catch (error) {
-      console.error('Error clearing vector store:', error);
-      throw new Error('Failed to clear vector store');
+      console.error("Error clearing vector store:", error);
+      throw new Error("Failed to clear vector store");
     }
   }
 
@@ -360,22 +371,22 @@ class VectorStore {
     try {
       const [clientHealth, embeddingHealth] = await Promise.all([
         this.client.checkHealth(),
-        this.embeddingService.checkServiceHealth()
+        this.embeddingService.checkServiceHealth(),
       ]);
 
       return {
         healthy: clientHealth.healthy && embeddingHealth.healthy,
         components: {
           vectorDB: clientHealth,
-          embeddingService: embeddingHealth
+          embeddingService: embeddingHealth,
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       return {
         healthy: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
